@@ -79,7 +79,8 @@ Eighteen weeks, one evolving project, one weekly rhythm: learn the primitive, bu
 3. Thursday (1.5 to 2 h): read the reference implementation and trace the named path end to end. Write the trace as a numbered call chain with file:line references.
 4. Friday (1 to 1.5 h): the modifications and experiments.
 5. Weekend (3 to 4 h): run the eval set, compare against last week, then attempt the checkpoint. If you can't pass it, the next week starts late; don't skip ahead.
-6. One hour somewhere in the week: the frontier log (Appendix E).
+6. If you fall behind mid-week — say it's Friday and you've only finished Tuesday's build — don't compress the missing days into one sitting or jump straight to the weekend's eval run. Finish the remaining Build steps in order first; it's fine to drop that week's Experiments to make time, but the eval set and checkpoint are what tell you whether the week actually landed, not the calendar.
+7. One hour somewhere in the week: the frontier log (Appendix E).
 
 **Weekly note.** One file per week in `notes/`, with the same seven headings: the primitive (what problem exists), my implementation, the reference implementation, differences and why, experiments and numbers, failure modes, and what I would actually ship.
 
@@ -327,32 +328,23 @@ import httpx
 API_URL = "https://api.anthropic.com/v1/messages"
 RETRYABLE = {408, 409, 429, 500, 502, 503, 504, 529}
 
-
 class LLMError(Exception): ...
 
-
 def call(body: dict, *, timeout: float = 300.0, max_retries: int = 5) -> tuple[dict, dict]:
-    headers = {
-        "x-api-key": os.environ["ANTHROPIC_API_KEY"],
-        "anthropic-version": "2023-06-01",
-        "content-type": "application/json",
-    }
+    headers = {"x-api-key": os.environ["ANTHROPIC_API_KEY"],
+               "anthropic-version": "2023-06-01", "content-type": "application/json"}
     last_error = ""
     for attempt in range(max_retries + 1):
         started, wait = time.monotonic(), None
         try:
             r = httpx.post(API_URL, headers=headers, json=body, timeout=timeout)
-        except httpx.TransportError as e:  # connect errors and timeouts
-            last_error = repr(
-                e
-            )  # safe to retry: a model call has no side effects (you may pay twice)
+        except httpx.TransportError as e:   # connect errors and timeouts
+            last_error = repr(e)            # safe to retry: a model call has no side effects (you may pay twice)
         else:
             if r.status_code == 200:
-                return r.json(), {
-                    "attempts": attempt + 1,
-                    "latency_s": round(time.monotonic() - started, 3),
-                    "request_id": r.headers.get("request-id"),
-                }
+                return r.json(), {"attempts": attempt + 1,
+                                  "latency_s": round(time.monotonic() - started, 3),
+                                  "request_id": r.headers.get("request-id")}
             last_error = f"HTTP {r.status_code}: {r.text[:300]}"
             hint = r.headers.get("x-should-retry")
             if hint == "false" or (r.status_code not in RETRYABLE and hint != "true"):
@@ -362,9 +354,7 @@ def call(body: dict, *, timeout: float = 300.0, max_retries: int = 5) -> tuple[d
             except ValueError:
                 pass
         if attempt < max_retries:
-            time.sleep(
-                wait if wait is not None else min(60.0, 2**attempt) * random.uniform(0.5, 1.5)
-            )
+            time.sleep(wait if wait is not None else min(60.0, 2 ** attempt) * random.uniform(0.5, 1.5))
     raise LLMError(f"gave up after {max_retries + 1} attempts: {last_error}")
 ```
 
@@ -374,11 +364,10 @@ def call(body: dict, *, timeout: float = 300.0, max_retries: int = 5) -> tuple[d
 # rig/workspace.py (Tuesday — step 6)
 from pathlib import Path
 
-
 class Workspace:
     def __init__(self, root: Path, name: str):
-        self.root = root  # checkout's root; every file tool is jailed here (see resolve() below)
-        self.name = name  # repo's display name, interpolated into the system prompt as {repo}
+        self.root = root   # checkout's root; every file tool is jailed here (see resolve() below)
+        self.name = name   # repo's display name, interpolated into the system prompt as {repo}
 ```
 
 `rig/loop.py`, the whole agent. The `ws` argument `run_agent` takes, and forwards into every tool call via `run_tool`, is the `Workspace` built just above:
@@ -392,11 +381,8 @@ from rig.tools import TOOLS, run_tool
 import rig.tools.fs, rig.tools.search, rig.tools.shell  # noqa: F401  (registers the tools)
 
 SYSTEM = (Path(__file__).parent / "prompts" / "system.md").read_text()
-TRUNCATED = (
-    "Not executed: your response hit max_tokens, so these arguments may be "
-    "truncated. Re-issue the call with complete arguments."
-)
-
+TRUNCATED = ("Not executed: your response hit max_tokens, so these arguments may be "
+             "truncated. Re-issue the call with complete arguments.")
 
 def run_agent(task: str, *, ws, model: str, budget: Budget, trace, max_tokens: int = 8192) -> dict:
     messages = [{"role": "user", "content": task}]
@@ -406,23 +392,12 @@ def run_agent(task: str, *, ws, model: str, budget: Budget, trace, max_tokens: i
     try:
         while True:
             budget.check()  # raises BudgetExceeded("steps" | "input_tokens" | "usd" | "wall_clock")
-            body = {
-                "model": model,
-                "max_tokens": max_tokens,
-                "system": SYSTEM.format(repo=ws.name),
-                "messages": messages,
-                "tools": schemas,
-            }
+            body = {"model": model, "max_tokens": max_tokens, "system": SYSTEM.format(repo=ws.name),
+                    "messages": messages, "tools": schemas}
             resp, meta = llm.call(body)
             budget.charge(model, resp["usage"])
-            trace.event(
-                "llm.response",
-                step=budget.steps,
-                stop_reason=resp["stop_reason"],
-                usage=resp["usage"],
-                content=resp["content"],
-                **meta,
-            )
+            trace.event("llm.response", step=budget.steps, stop_reason=resp["stop_reason"],
+                        usage=resp["usage"], content=resp["content"], **meta)
             messages.append({"role": "assistant", "content": resp["content"]})
 
             calls = [b for b in resp["content"] if b["type"] == "tool_use"]
@@ -438,25 +413,11 @@ def run_agent(task: str, *, ws, model: str, budget: Budget, trace, max_tokens: i
                     t0 = time.monotonic()
                     out, is_error = run_tool(ws, c["name"], c["input"])
                     took = time.monotonic() - t0
-                trace.event(
-                    "tool.result",
-                    step=budget.steps,
-                    call_id=c["id"],
-                    tool=c["name"],
-                    input=c["input"],
-                    is_error=is_error,
-                    duration_s=round(took, 3),
-                    output_chars=len(out),
-                    output=out,
-                )
-                results.append(
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": c["id"],
-                        "content": out,
-                        "is_error": is_error,
-                    }
-                )
+                trace.event("tool.result", step=budget.steps, call_id=c["id"], tool=c["name"],
+                            input=c["input"], is_error=is_error, duration_s=round(took, 3),
+                            output_chars=len(out), output=out)
+                results.append({"type": "tool_result", "tool_use_id": c["id"],
+                                "content": out, "is_error": is_error})
             messages.append({"role": "user", "content": results})
     except BudgetExceeded as e:
         status = f"budget:{e}"
@@ -464,11 +425,8 @@ def run_agent(task: str, *, ws, model: str, budget: Budget, trace, max_tokens: i
         status = "llm_error"
         trace.event("error", where="llm", message=str(e))
     last = messages[-1]
-    final = (
-        "".join(b["text"] for b in last["content"] if b.get("type") == "text")
-        if last["role"] == "assistant"
-        else ""
-    )
+    final = "".join(b["text"] for b in last["content"] if b.get("type") == "text") \
+        if last["role"] == "assistant" else ""
     trace.event("run.end", status=status, final=final, **budget.totals())
     return {"status": status, "final": final, "messages": messages, **budget.totals()}
 ```
@@ -481,30 +439,20 @@ The shapes above (`resp["stop_reason"]`, `body["system"]`, a `tool_use` block's 
 # rig/trace.py
 import itertools, json, time
 
-
 class Trace:
     def __init__(self, path, run_id):
         self.f, self.run_id, self.seq = open(path, "a"), run_id, itertools.count()
 
     def event(self, kind, **fields):
-        rec = {
-            "run_id": self.run_id,
-            "seq": next(self.seq),
-            "ts": time.time(),
-            "event": kind,
-            **fields,
-        }
+        rec = {"run_id": self.run_id, "seq": next(self.seq), "ts": time.time(), "event": kind, **fields}
         self.f.write(json.dumps(rec) + "\n")
         self.f.flush()  # one line per event: a crash still leaves a readable prefix
-
 
 # rig/budget.py
 import time
 from dataclasses import dataclass, field
 
-
 class BudgetExceeded(Exception): ...
-
 
 @dataclass
 class Budget:
@@ -518,14 +466,10 @@ class Budget:
     started: float = field(default_factory=time.monotonic)
 
     def check(self):
-        if self.steps >= self.max_steps:
-            raise BudgetExceeded("steps")
-        if self.input_tokens >= self.max_input_tokens:
-            raise BudgetExceeded("input_tokens")
-        if self.usd >= self.max_usd:
-            raise BudgetExceeded("usd")
-        if time.monotonic() - self.started >= self.max_wall_clock_s:
-            raise BudgetExceeded("wall_clock")
+        if self.steps >= self.max_steps: raise BudgetExceeded("steps")
+        if self.input_tokens >= self.max_input_tokens: raise BudgetExceeded("input_tokens")
+        if self.usd >= self.max_usd: raise BudgetExceeded("usd")
+        if time.monotonic() - self.started >= self.max_wall_clock_s: raise BudgetExceeded("wall_clock")
 
     def charge(self, model, usage):
         self.steps += 1
@@ -543,37 +487,24 @@ On Tuesday, `check()` tripping is fine to leave untested (your limits are genero
 ```python
 from dataclasses import dataclass
 from typing import Callable
-
 MAX_OUT = 30_000  # characters returned to the model per call
 
-
-class ToolError(Exception):
-    """Expected failure; the message goes back to the model."""
-
+class ToolError(Exception): """Expected failure; the message goes back to the model."""
 
 @dataclass
 class Tool:
     schema: dict
     fn: Callable
 
-
 TOOLS: dict[str, Tool] = {}
-
 
 def tool(name, description, properties, required):
     def register(fn):
-        TOOLS[name] = Tool(
-            {
-                "name": name,
-                "description": description,
-                "input_schema": {"type": "object", "properties": properties, "required": required},
-            },
-            fn,
-        )
+        TOOLS[name] = Tool({"name": name, "description": description,
+                            "input_schema": {"type": "object", "properties": properties,
+                                             "required": required}}, fn)
         return fn
-
     return register
-
 
 def run_tool(ws, name, args) -> tuple[str, bool]:
     t = TOOLS.get(name)
@@ -583,22 +514,20 @@ def run_tool(ws, name, args) -> tuple[str, bool]:
         out, is_error = t.fn(ws, **args), False
     except ToolError as e:
         out, is_error = str(e), True
-    except TypeError as e:  # missing or unexpected arguments
+    except TypeError as e:                       # missing or unexpected arguments
         out, is_error = f"Bad arguments for {name}: {e}", True
-    except Exception as e:  # a bug in your tool: loud in the trace, not fatal
+    except Exception as e:                       # a bug in your tool: loud in the trace, not fatal
         out, is_error = f"Internal error in {name} ({type(e).__name__}): {e}", True
     return truncate(out), is_error
-
 
 def truncate(s: str) -> str:
     if len(s) <= MAX_OUT:
         return s
-    head, tail = (
-        s[: MAX_OUT * 2 // 3],
-        s[-(MAX_OUT // 3) :],
-    )  # keep the tail: errors and summaries live there
+    head, tail = s[: MAX_OUT * 2 // 3], s[-(MAX_OUT // 3):]   # keep the tail: errors and summaries live there
     return f"{head}\n\n[... {len(s) - len(head) - len(tail)} characters omitted ...]\n\n{tail}"
 ```
+
+*Reader variation:* the raw dicts above are the fastest way to see the wire shape, but if you'd rather have typed, validated tool schemas, defining `ToolPropertySchema`/`ToolInputSchema`/`Tool` as small Pydantic models works just as well — dump one with `.model_dump(exclude=["func"])` to get the same JSON shape `tools` expects on the wire. Either representation satisfies the rest of this week's contracts; pick whichever you'll trust yourself to keep correct as the tool count grows.
 
 `rig/workspace.py`, Wednesday's addition: once the sandbox container exists, `exec_prefix` is the argv prefix that turns any command into a command run inside this run's container, built once in the constructor from the container's name:
 
@@ -618,20 +547,17 @@ The two tools with real engineering in them. `resolve` is the path jail: every t
 ```python
 # rig/tools/fs.py (excerpt)
 def resolve(ws, rel: str) -> Path:
-    p = (ws.root / rel).resolve()  # follows symlinks, so a link cannot escape the jail
+    p = (ws.root / rel).resolve()          # follows symlinks, so a link cannot escape the jail
     if not p.is_relative_to(ws.root):
         raise ToolError(f"{rel}: outside the repository")
     return p
 
-
-@tool(
-    "edit_file",
-    "Replace exactly one occurrence of old_text with new_text. old_text must match the file "
-    "exactly, including indentation, and must be unique; include surrounding lines if needed. "
-    "To create a new file, pass an empty old_text.",
-    {"path": {"type": "string"}, "old_text": {"type": "string"}, "new_text": {"type": "string"}},
-    ["path", "old_text", "new_text"],
-)
+@tool("edit_file",
+      "Replace exactly one occurrence of old_text with new_text. old_text must match the file "
+      "exactly, including indentation, and must be unique; include surrounding lines if needed. "
+      "To create a new file, pass an empty old_text.",
+      {"path": {"type": "string"}, "old_text": {"type": "string"}, "new_text": {"type": "string"}},
+      ["path", "old_text", "new_text"])
 def edit_file(ws, path, old_text, new_text):
     p = resolve(ws, path)
     if old_text == "":
@@ -643,30 +569,22 @@ def edit_file(ws, path, old_text, new_text):
     src = p.read_text()
     n = src.count(old_text)
     if n != 1:
-        raise ToolError(
-            f"old_text matched {n} times in {path}; it must match exactly once. "
-            "Re-read the file and copy the exact text, with more context."
-        )
+        raise ToolError(f"old_text matched {n} times in {path}; it must match exactly once. "
+                        "Re-read the file and copy the exact text, with more context.")
     p.write_text(src.replace(old_text, new_text, 1))
     return f"Edited {path}"
 
-
 # rig/tools/shell.py
-@tool(
-    "bash",
-    "Run a shell command at the repository root inside a sandbox with no network "
-    "access. Use it to run tests and small scripts. Output is truncated to about 30k characters.",
-    {"command": {"type": "string"}, "timeout_s": {"type": "integer", "minimum": 1, "maximum": 600}},
-    ["command"],
-)
+@tool("bash", "Run a shell command at the repository root inside a sandbox with no network "
+      "access. Use it to run tests and small scripts. Output is truncated to about 30k characters.",
+      {"command": {"type": "string"}, "timeout_s": {"type": "integer", "minimum": 1, "maximum": 600}},
+      ["command"])
 def bash(ws, command, timeout_s=120):
     # `timeout` runs INSIDE the container: killing the host-side `docker exec` client
     # does not kill the process it started in the container.
     argv = ws.exec_prefix + ["timeout", "-k", "5", str(timeout_s), "bash", "-c", command]
     try:
-        p = subprocess.run(
-            argv, capture_output=True, text=True, errors="replace", timeout=timeout_s + 20
-        )
+        p = subprocess.run(argv, capture_output=True, text=True, errors="replace", timeout=timeout_s + 20)
     except subprocess.TimeoutExpired:
         raise ToolError(f"No return within {timeout_s + 20}s; the sandbox may be wedged.")
     out = p.stdout + (f"\n[stderr]\n{p.stderr}" if p.stderr else "")
@@ -757,6 +675,8 @@ Answer key at `8.5.0`, so you can grade it yourself: `Command.main` (core.py:146
 ## Task ladder and initial eval set
 The twelve tasks are both the week's difficulty ladder and the regression suite you keep for all eighteen weeks. Each seeded bug below was applied to click `8.5.0` and confirmed to fail exactly the listed tests, and each hidden test was confirmed to fail before a fix and pass after one. The agent sees only the prompt column; seeds and hidden tests live outside its workspace.
 
+**This is not a separate testing framework — it's `pytest`, driven by a thin harness you write.** "Grader" in the table below means: run the named test file(s) with `pytest` inside the sandbox after the agent finishes (or, for T01 to T03 and T12, compare the agent's final text answer against the expected one and check `git diff` is empty) — there's no special eval DSL to learn. `evals/tasks/week1.yaml` is just a data file holding each task's id, prompt, seed path and pytest selector(s); `evals/run_evals.py` is the script that reads it and, per task, snapshots click fresh, applies the seed patch if there is one, calls your own `run_agent()`, runs that grader, and appends one line of JSON to `results.jsonl`. If you've only used unit tests to check your own code before, the shift here is that the thing under test is the agent's *behavior on a task*, and the test fixture is a disposable git snapshot rather than a function call.
+
 | ID | Rung | Prompt the agent sees (symptom only) | Seed (file: old → new) | Grader |
 |---|---|---|---|---|
 | T01 | Locate | Do not modify files. Which line raises the error a user sees when a value is outside a `click.IntRange`? Answer with path:line and the enclosing function. | none | Answer names `src/click/types.py:677` (accept 676 to 681) and `convert`; empty diff |
@@ -781,22 +701,17 @@ The two hidden tests, kept in `evals/hidden/` and copied to `/tmp/hidden` in the
 import click
 from click.formatting import measure_table
 
-
 def test_measure_table_ignores_ansi():
     assert measure_table([(click.style("--x", fg="red"), "help")])[0] == 3
-
 
 # test_hidden_nan.py
 import math, click, pytest
 
-
-@pytest.mark.parametrize(
-    "kw", [{"min": 0, "max": 1}, {"min": 0}, {"max": 1}, {"min": 0, "max": 1, "clamp": True}]
-)
+@pytest.mark.parametrize("kw", [{"min": 0, "max": 1}, {"min": 0}, {"max": 1},
+                                {"min": 0, "max": 1, "clamp": True}])
 def test_float_range_rejects_nan(kw):
     with pytest.raises(click.BadParameter):
         click.FloatRange(**kw).convert("nan", None, None)
-
 
 def test_unbounded_float_still_accepts_nan():
     assert math.isnan(click.FLOAT.convert("nan", None, None))
@@ -1786,15 +1701,14 @@ Experiments 4 and 5 close the loop on two claims the week has been making all al
 # a sketch of the cascade; the policy and the stall signal are yours to tune
 LADDER = [("small", "low"), ("small", "high"), ("large", "medium"), ("large", "high")]
 
-
 def route(role: str, session: Session, policy: Policy) -> Route:
     if session.pinned and not session.at_turn_boundary:
-        return session.pinned  # protect the prompt cache
-    rung = policy.start_rung(role)  # e.g. explore -> 0, plan -> 2
+        return session.pinned                                 # protect the prompt cache
+    rung = policy.start_rung(role)                            # e.g. explore -> 0, plan -> 2
     if stalled(session.recent_tool_calls, window=6, repeats=3) or session.tests_failed_after_edit:
-        rung = min(session.rung + 1, len(LADDER) - 1)  # effort first, then model
+        rung = min(session.rung + 1, len(LADDER) - 1)         # effort first, then model
         if session.escalations >= policy.max_escalations:
-            rung = session.rung  # bounded: no runaway escalation
+            rung = session.rung                               # bounded: no runaway escalation
     if session.budget.remaining_usd < policy.low_budget_usd:
         rung = min(rung, policy.cheapest_acceptable_rung(role))
     model, effort = LADDER[rung]
@@ -1954,22 +1868,19 @@ from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
 
-
 class Decision(Enum):
     ALLOW = "allow"
     ASK = "ask"
     DENY = "deny"
 
-
 @dataclass(frozen=True)
 class Grant:
-    service: str  # "calendar", "gmail", "shop"
-    access: str  # "read" or "write"
+    service: str                  # "calendar", "gmail", "shop"
+    access: str                   # "read" or "write"
     expires_at: datetime
-    task_id: str | None = None  # None = any task (only for reads you are comfortable with)
+    task_id: str | None = None    # None = any task (only for reads you are comfortable with)
     max_usd: float | None = None  # per-transaction ceiling for spending tools
     one_shot: bool = False
-
 
 @dataclass(frozen=True)
 class Call:
@@ -1978,23 +1889,16 @@ class Call:
     task_id: str
     usd: float = 0.0
 
-
-def decide(
-    call: Call, grants: list[Grant], now: datetime, used: set[Grant]
-) -> tuple[Decision, Grant | None]:
+def decide(call: Call, grants: list[Grant], now: datetime, used: set[Grant]) -> tuple[Decision, Grant | None]:
     for g in grants:
-        if (
-            g.service == call.service
-            and g.access == call.access
-            and now < g.expires_at
-            and (g.task_id is None or g.task_id == call.task_id)
-            and (g.max_usd is None or call.usd <= g.max_usd)
-            and not (g.one_shot and g in used)
-        ):
+        if (g.service == call.service and g.access == call.access and now < g.expires_at
+                and (g.task_id is None or g.task_id == call.task_id)
+                and (g.max_usd is None or call.usd <= g.max_usd)
+                and not (g.one_shot and g in used)):
             return Decision.ALLOW, g
     if call.access == "read":
         return Decision.ASK, None
-    return (Decision.ASK if call.usd == 0 else Decision.DENY), None  # spending needs a grant first
+    return (Decision.ASK if call.usd == 0 else Decision.DENY), None   # spending needs a grant first
 ```
 
 ## Project increment
@@ -2146,31 +2050,29 @@ A sketch of the core, with support checked by a separate step rather than truste
 ```python
 @dataclass(frozen=True)
 class Passage:
-    id: str  # "E12"
-    url: str  # canonical
+    id: str               # "E12"
+    url: str              # canonical
     fetched_at: datetime
-    start: int  # character offsets into the stored extracted text
+    start: int            # character offsets into the stored extracted text
     end: int
     text: str
-
 
 @dataclass
 class Claim:
     text: str
-    evidence: list[str]  # passage ids the writer cited
-    supported: bool | None = None  # set by the verifier, never by the writer
-
+    evidence: list[str]           # passage ids the writer cited
+    supported: bool | None = None # set by the verifier, never by the writer
 
 async def research(question: str, budget: Budget) -> Answer:
     state = ResearchState(question)
     for _ in range(budget.max_rounds):
-        queries = await plan_queries(state)  # what is still unknown?
-        hits = await gather_all(search(q) for q in queries)  # parallel, per-call timeout
+        queries = await plan_queries(state)                    # what is still unknown?
+        hits = await gather_all(search(q) for q in queries)    # parallel, per-call timeout
         pages = await gather_all(fetch(h.url) for h in state.unseen(hits))
         state.add(rank(question, passages_of(extract(p) for p in pages))[:40])
         if budget.exhausted() or not await has_gaps(state):
             break
-    answer = await synthesize(question, state.passages)  # claims cite passage ids
+    answer = await synthesize(question, state.passages)       # claims cite passage ids
     for claim in answer.claims:
         claim.supported = await entails(claim.text, state.get(claim.evidence))
     return answer
@@ -2327,20 +2229,13 @@ Your own eval set tells you if deep mode helps on your own questions; search_eva
 def run_subagent(parent, task: str, tool_names: list[str], max_usd: float, max_steps: int = 15):
     if parent.depth >= 2:
         raise ToolError("Subagent depth limit reached; do this step yourself.")
-    reserve = parent.budget.reserve(
-        usd=min(max_usd, 0.5 * parent.budget.remaining_usd()), steps=max_steps
-    )
+    reserve = parent.budget.reserve(usd=min(max_usd, 0.5 * parent.budget.remaining_usd()), steps=max_steps)
     try:
-        result = run_agent(
-            task,
-            tools=parent.tools.subset(tool_names),
-            budget=reserve,
-            depth=parent.depth + 1,
-            trace=parent.trace.child(task),
-        )
+        result = run_agent(task, tools=parent.tools.subset(tool_names), budget=reserve,
+                           depth=parent.depth + 1, trace=parent.trace.child(task))
     finally:
-        parent.budget.settle(reserve)  # unused reserve returns to the parent
-    return result.final[:2000]  # findings and evidence ids, never the child's transcript
+        parent.budget.settle(reserve)    # unused reserve returns to the parent
+    return result.final[:2000]           # findings and evidence ids, never the child's transcript
 ```
 
 ## Project increment
@@ -2490,13 +2385,13 @@ The last two experiments check costs and trade-offs you've been assuming all wee
 @dataclass(frozen=True)
 class Artifact:
     id: str
-    path: str  # inside the workspace
+    path: str                  # inside the workspace
     sha256: str
     mime_type: str
     run_id: str
-    step: int  # trace step that produced it
-    code_sha256: str  # the exact code cell that wrote it
-    inputs: dict[str, str]  # input path -> sha256 when it was read
+    step: int                  # trace step that produced it
+    code_sha256: str           # the exact code cell that wrote it
+    inputs: dict[str, str]     # input path -> sha256 when it was read
     created_at: datetime
 ```
 
@@ -2642,18 +2537,17 @@ class MemoryKind(Enum):
     WORKING = "working"
     PROCEDURAL = "procedural"
 
-
 @dataclass(frozen=True)
 class Memory:
     id: str
     kind: MemoryKind
     text: str
     source_session: str
-    source_quote: str  # the words it came from; no quote, no memory
-    confirmed_by_user: bool  # instead of a model-generated confidence score
+    source_quote: str           # the words it came from; no quote, no memory
+    confirmed_by_user: bool     # instead of a model-generated confidence score
     created_at: datetime
     expires_at: datetime | None
-    supersedes: str | None  # id of the memory this one replaces
+    supersedes: str | None      # id of the memory this one replaces
 ```
 
 ## Project increment
@@ -2985,41 +2879,38 @@ The ledger core below was tested with real process kills. In 50 trials with 82 k
 #   state TEXT NOT NULL CHECK (state IN ('intent', 'done', 'unknown')), result TEXT);
 # SQLite in autocommit mode, journal_mode=WAL, synchronous=FULL: every write is durable on its own.
 
-NOT_DONE, UNKNOWN = object(), object()  # what a tool's reconcile() can report
-
+NOT_DONE, UNKNOWN = object(), object()     # what a tool's reconcile() can report
 
 class NeedsHuman(Exception):
     """A side effect may or may not have happened; a person (or a reconciliation job) decides."""
 
-
 def durable_tool_call(ledger, run_id, seq, index, call, tools):
-    key = f"{run_id}:{seq}:{index}"  # stable across replays; the model's call id is not
+    key = f"{run_id}:{seq}:{index}"        # stable across replays; the model's call id is not
     tool = tools[call["name"]]
-    row = ledger.row(key)  # (state, result) or None
+    row = ledger.row(key)                   # (state, result) or None
     if row and row[0] == "done":
-        return row[1]  # replay: never execute twice
+        return row[1]                       # replay: never execute twice
     if row and row[0] == "unknown":
         raise NeedsHuman(key)
-    if row and row[0] == "intent":  # died between intent and result: did it happen?
+    if row and row[0] == "intent":          # died between intent and result: did it happen?
         seen = tool.reconcile(key, call["input"])
         if seen is UNKNOWN:
             ledger.mark_unknown(key)
             raise NeedsHuman(key)
-        if seen is not NOT_DONE:  # it happened; record what we observed
+        if seen is not NOT_DONE:            # it happened; record what we observed
             ledger.finish(key, seen)
             return seen
     else:
-        ledger.intent(key, run_id, call["name"], call["input"])  # durable BEFORE the side effect
-    result = tool.run(call["input"], idempotency_key=key)  # external APIs dedupe on the key
+        ledger.intent(key, run_id, call["name"], call["input"])   # durable BEFORE the side effect
+    result = tool.run(call["input"], idempotency_key=key)        # external APIs dedupe on the key
     ledger.finish(key, result)
     return result
-
 
 def run_durable(run_id, task, model, tools, ledger, max_steps=20):
     transcript = [{"role": "user", "content": task}]
     for seq in range(max_steps):
         response = ledger.get_step(run_id, seq, "model")
-        if response is None:  # not recorded, so nothing from this step has run yet
+        if response is None:                # not recorded, so nothing from this step has run yet
             response = ledger.put_step(run_id, seq, "model", model(transcript))  # INSERT OR IGNORE
         transcript.append({"role": "assistant", "content": response["content"]})
         calls = [b for b in response["content"] if b["type"] == "tool_use"]
@@ -3170,49 +3061,37 @@ from dataclasses import dataclass, field
 from enum import Enum
 from urllib.parse import urlsplit
 
-
 class Decision(Enum):
     ALLOW = "allow"
     ASK = "ask"
     DENY = "deny"
 
-
 @dataclass
 class BrowserTask:
-    allowed_hosts: set[str]  # granted for this task only
-    private_values: set[str] = field(default_factory=set)  # strings read from private sources
+    allowed_hosts: set[str]                                 # granted for this task only
+    private_values: set[str] = field(default_factory=set)   # strings read from private sources
 
     @property
     def tainted(self) -> bool:
         return bool(self.private_values)
 
-
 def host_of(url: str) -> str | None:
     u = urlsplit(url)
-    return u.hostname if u.scheme == "https" else None  # keeps a trailing dot: "x.ai." != "x.ai"
-
+    return u.hostname if u.scheme == "https" else None      # keeps a trailing dot: "x.ai." != "x.ai"
 
 def carries_private(task: BrowserTask, text: str) -> bool:
     return any(v and v in text for v in task.private_values)
 
-
-def gate(
-    task: BrowserTask,
-    action: str,
-    *,
-    url: str = "",
-    text: str = "",
-    submits: bool = False,
-    irreversible: bool = False,
-) -> Decision:
-    if irreversible:  # purchase, delete, send money
+def gate(task: BrowserTask, action: str, *, url: str = "", text: str = "", submits: bool = False,
+         irreversible: bool = False) -> Decision:
+    if irreversible:                                        # purchase, delete, send money
         return Decision.ASK
     if action == "navigate":
         host = host_of(url)
         if host is None:
-            return Decision.DENY  # no http:, file:, javascript:, data:
+            return Decision.DENY                            # no http:, file:, javascript:, data:
         if carries_private(task, url):
-            return Decision.ASK  # a GET is an exfiltration channel
+            return Decision.ASK                             # a GET is an exfiltration channel
         if host not in task.allowed_hosts:
             return Decision.ASK if task.tainted else Decision.ALLOW
         return Decision.ALLOW
@@ -3222,7 +3101,7 @@ def gate(
         return Decision.ASK if submits else Decision.ALLOW  # Enter or a submit button sends it
     if action == "click":
         return Decision.ASK if submits else Decision.ALLOW
-    return Decision.DENY  # unknown action: closed by default
+    return Decision.DENY                                    # unknown action: closed by default
 ```
 
 ## Project increment
