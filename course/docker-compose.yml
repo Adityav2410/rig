@@ -1,0 +1,11 @@
+services:
+  ai-study:
+    build: .
+    container_name: ai-study
+    ports:
+      - "127.0.0.1:8765:8765"
+    volumes:
+      - .:/app
+    working_dir: /app
+    command: python serve.py --host 0.0.0.0 --port 8765
+    restart: unless-stopped
