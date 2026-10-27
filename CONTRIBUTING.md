@@ -14,7 +14,7 @@ uv sync
 make lint fmt-check typecheck test
 ```
 
-All four must pass; CI runs the same checks. Unit tests must not need the network, an API key, or Docker. Anything that calls the model belongs in `evals/`.
+All four must pass; CI runs the same checks. The snapshot tests need the click checkout from the README's quickstart (`workspaces/click` at `8.5.0`). Beyond that, unit tests must not need the network, an API key, or Docker; anything that calls the model belongs in `evals/`.
 
 ## Reporting a bug
 

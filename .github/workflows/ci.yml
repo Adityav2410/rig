@@ -15,4 +15,6 @@ jobs:
       - run: uv run ruff check .
       - run: uv run ruff format --check .
       - run: uv run mypy rig/
+      - name: Check out the click target repo (used by the snapshot tests)
+        run: git clone -q --depth 1 --branch 8.5.0 https://github.com/pallets/click workspaces/click
       - run: uv run pytest -q

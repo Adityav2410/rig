@@ -89,7 +89,7 @@ Tasks live in `evals/tasks/`, seeded bugs in `evals/seeds/`, and hidden grader t
 
 ```bash
 make help        # list commands
-make test        # pytest (no network, no Docker)
+make test        # pytest (needs workspaces/click; no API key, no Docker)
 make lint        # ruff check
 make fmt-check   # ruff format --check
 make typecheck   # mypy --strict
