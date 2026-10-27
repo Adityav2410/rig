@@ -914,6 +914,7 @@ Every pi link on this page is pinned to commit `136b87e` (2026-10-23), so line n
 
 ## Concepts
 - **Three layers.** Provider adapter (wire format to a normalized message and event type), runtime (the loop, events, hooks, cancellation), harness (tools, prompt assembly, sessions, UI). Most frameworks blur these; pi keeps them in separate packages — [`packages/ai`](https://github.com/earendil-works/pi/tree/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai), [`packages/agent`](https://github.com/earendil-works/pi/tree/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent), [`packages/coding-agent`](https://github.com/earendil-works/pi/tree/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent) — and the split is a real dependency rule, not folder naming: the runtime never imports a provider implementation ([`sdk.ts` L43–46](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/sdk.ts#L43-L46) says so in a comment).
+- **Provider-neutral messages.** rig owns its message types (user text; an assistant message holding text, thinking and tool calls; one tool result per call), and each provider adapter translates them to its wire format and back. The runtime, the session log and the trace then never see a vendor's JSON, and moving from Anthropic to OpenAI or OpenRouter is a constructor argument. pi works the same way: [`types.ts` L422–659](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/types.ts#L422-L659) defines `TextContent`, `ThinkingContent`, `ToolCall`, `UserMessage`, `AssistantMessage` and `ToolResultMessage`, and every file in `packages/ai/src/api/` converts to and from them. OpenRouter, vLLM and Ollama all accept OpenAI's [Chat Completions](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create) format, so one adapter with a configurable `base_url` covers all of them.
 - **Events, not return values.** A loop that yields `turn_start`, `message_delta`, `tool_start`, `tool_end`, `turn_end` lets the CLI, the trace writer and a future UI all subscribe without touching the loop. Anthropic's API already streams this way — see [Streaming Messages](https://platform.claude.com/docs/en/build-with-claude/streaming); pi's own event union is [`AgentEvent`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/types.ts#L516).
 - **Parallel tool calls with ordered results.** Execute concurrently, append results in the order the model issued the calls. Order keeps transcripts deterministic, which matters for replay and for prompt caching next week. In Python that's [`concurrent.futures`](https://docs.python.org/3/library/concurrent.futures.html): `Executor.map` preserves submission order, `as_completed` does not.
 - **Same-file writes must serialize** even when everything else runs in parallel.
@@ -923,14 +924,15 @@ Every pi link on this page is pinned to commit `136b87e` (2026-10-23), so line n
 - **Sessions as append-only logs.** A JSONL of entries with `id` and `parentId` gives resume, branching and "undo" without ever rewriting history. Your own Claude Code session files under `~/.claude/projects/` are a live example of the pattern.
 
 ## This week's objective and target layout
-**Objective.** By Sunday, rig v0.2 is a CLI that streams the model's output as it arrives, survives Ctrl-C at any moment with a transcript the API still accepts, takes steering messages mid-run, resumes or forks any past session, and edits files without silently guessing — and scores no worse than v0.1 on T01–T12.
+**Objective.** By Sunday, rig v0.2 is a CLI that streams the model's output as it arrives, survives Ctrl-C at any moment with a transcript the API still accepts, takes steering messages mid-run, resumes or forks any past session, and edits files without silently guessing, runs on Anthropic, OpenAI or OpenRouter by changing one flag — and scores no worse than v0.1 on T01–T12.
 
-**What changes.** Week 1's `loop.py` does three jobs at once: it talks to the API, runs the loop, and handles every side effect (trace, budget, tools). This week you pull those apart into three layers, mirroring pi file for file: The loop module becomes a stateful class this week, so **rename `loop.py` to `agent.py`** and wrap its state in an `Agent` class (pi's `agent.ts` is the model); keep `run_agent(task, ws=..., model=..., budget=..., trace=...)` as a three-line function that builds an `Agent` and returns its `run()` result. If you already built Week 1's loop as an `Agent` class in `agent.py`, there's nothing to rename.
+**What changes.** Week 1's `loop.py` does three jobs at once: it talks to the API, runs the loop, and handles every side effect (trace, budget, tools). This week you pull those apart into three layers, mirroring pi file for file: The loop module becomes a stateful class this week, so **rename `loop.py` to `agent.py`** and wrap its state in an `Agent` class (pi's `agent.ts` is the model); keep `run_agent(task, ws=..., model=..., budget=..., trace=...)` as a three-line function that builds an `Agent` and returns its `run()` result. If you already built Week 1's loop as an `Agent` class in `agent.py`, there's nothing to rename. The provider layer is also where rig stops being Anthropic-shaped: Week 1 builds Anthropic's JSON and reads it back directly; from this week the runtime speaks rig's own message types, and only the files in `providers/` know any wire format.
 
 | rig file | Layer | Its one job | pi's counterpart | Day |
 |---|---|---|---|---|
-| `providers/base.py` | provider | `Event` types and the `Provider` protocol: one method, `stream(request)` | [`StreamFn`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/types.ts#L33) | Tue |
-| `providers/anthropic.py` | provider | Official SDK, streaming; SDK events in, rig `Event`s out | [`anthropic-messages.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/anthropic-messages.ts#L576) | Tue |
+| `providers/base.py` | provider | rig's own message types, `Context`, `Event` types and the `Provider` protocol: one method, `stream(context)` | [`StreamFn`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/types.ts#L33), [`types.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/types.ts#L422-L659) | Tue |
+| `providers/anthropic.py` | provider | Official SDK, streaming; rig `Context` in as a Messages API body, SDK events out as rig `Event`s | [`anthropic-messages.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/anthropic-messages.ts#L576) | Tue |
+| `providers/openai_chat.py` | provider | Official `openai` SDK, Chat Completions, streaming; one class for OpenAI, OpenRouter and local servers, chosen by `base_url` | [`openai-completions.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/openai-completions.ts#L309) | Thu |
 | `providers/fake.py` | provider | Scripted events, no network, for deterministic tests | [`faux.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/providers/faux.ts#L705) | Tue |
 | `runtime.py` | runtime | The loop as a generator of events; hooks; parallel tools; abort; steering | [`agent-loop.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L172) | Tue–Wed |
 | `agent.py` (shrinks) | runtime wrapper | Owns `messages`, the queues and the hooks; iterates `runtime.run()`; writes trace | [`agent.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent.ts#L194) | Tue–Wed |
@@ -941,10 +943,12 @@ Every pi link on this page is pinned to commit `136b87e` (2026-10-23), so line n
 ```text
 rig/
   providers/
-    __init__.py
-    base.py
+    __init__.py     # get_provider("anthropic" | "openai" | "openrouter", model): the one place a provider is chosen
+    base.py         # rig's own message and event types; no vendor shapes
     anthropic.py
+    openai_chat.py  # OpenAI, OpenRouter, vLLM, Ollama: one wire format, different base_url
     fake.py
+  costs/            # add rates for the OpenAI and OpenRouter models you run
   runtime.py
   agent.py          # Week 1's loop.py, renamed: a thin stateful wrapper around runtime.run()
   session.py
@@ -954,7 +958,7 @@ rig/
 evals/tasks/week1.yaml   # T13–T16 appended here: one growing regression suite
 evals/hidden/            # their hidden tests
 notes/week2-experiments.md
-tests/test_runtime.py, test_abort.py, test_edit_file_v2.py, test_session.py
+tests/test_runtime.py, test_providers.py, test_abort.py, test_edit_file_v2.py, test_session.py
 ```
 
 **How it fits together.** One user prompt, end to end. Each layer only calls the one below it, and only through the names shown:
@@ -964,7 +968,7 @@ tests/test_runtime.py, test_abort.py, test_edit_file_v2.py, test_session.py
 def main(args):
     session = SessionLog.open(args.session) if args.resume else SessionLog.new()       # Wed
     agent = Agent(ws, task, model=..., budget=..., trace=...,                         # run_agent's arguments
-                  provider=AnthropicProvider(model), session=session)                  # new kwargs, with defaults
+                  provider=get_provider(args.provider, model), session=session)        # new kwargs, with defaults
     signal.signal(signal.SIGINT, lambda *_: agent.abort() if not agent.aborting else sys.exit(130))
     start_stdin_reader(on_steer=agent.steer, on_follow_up=agent.follow_up)            # Wed, background thread
     for event in agent.events():
@@ -974,34 +978,34 @@ def main(args):
 class Agent:
     def events(self):
         hooks = Hooks(before_tool=allow, after_tool=identity, prepare_request=self._with_agents_md)  # Thu
-        for event in runtime.run(self.provider, self.messages, self.tools, self.budget, hooks,
+        for event in runtime.run(self.provider, self.system, self.messages, self.tools, self.budget, hooks,
                                  abort=self._abort, get_steering=self._drain_steer,
                                  get_follow_up=self._drain_follow_up):
             self.trace.log(event)         # update state first...
             self.session.append(event)
             yield event                   # ...then hand it to whoever is listening
-    def run(self):                        # run_agent() returns this; run_evals.py never changes
+    def run(self):                        # run_agent() returns this; run_evals.py only gains --provider
         for _ in self.events(): pass
         return self._result()
 
-# runtime.py — stateless loop (pi's agent-loop.ts): never imports anthropic, never touches files
-# providers/anthropic.py — the only file that imports the SDK (pi's packages/ai)
+# runtime.py — stateless loop (pi's agent-loop.ts): speaks only base.py's types; imports no SDK, touches no files
+# providers/*.py — the only files that import a vendor SDK or know a wire format (pi's packages/ai)
 ```
 
-**Why this achieves the objective.** Once the layers are separate, every feature this week is a local change: streaming touches only the provider; cancellation and steering touch only the runtime; sessions and `AGENTS.md` touch only the harness. The `FakeProvider` makes the runtime testable offline, so you can prove ordering and abort behavior without spending a cent. One rule keeps Week 1's harness working throughout: **keep the entry point `evals/run_evals.py` calls — `run_agent(...)`, or `Agent(...).run()` — exactly as it is**, so the harness never needs to change.
+**Why this achieves the objective.** Once the layers are separate, every feature this week is a local change: streaming and a second API touch only the providers; cancellation and steering touch only the runtime; sessions and `AGENTS.md` touch only the harness. The `FakeProvider` makes the runtime testable offline, so you can prove ordering and abort behavior without spending a cent. One rule keeps Week 1's harness working throughout: **keep the entry point `evals/run_evals.py` calls — `run_agent(...)`, or `Agent(...).run()` — exactly as it is**, so the harness never needs to change. The one exception is additive: a `provider=` keyword that defaults to `"anthropic"`, which `run_evals.py` fills from a new `--provider` flag.
 
 ## Day by day
 | Day | Time | Do | Working by end of day |
 |---|---|---|---|
 | Mon | 1.5 h | Trace pi's three layers through six files, at the line numbers given below | A half-page note mapping each rig file in the table above to its pi counterpart |
-| Tue | 2.5 to 3 h | `providers/`, `runtime.py`, parallel read-only tools; shrink `agent.py` | A fake provider streams events through `runtime.py`; read-only tools run in parallel with ordered results |
+| Tue | 2.5 to 3 h | rig's message types, the Anthropic and fake providers, `runtime.py`, parallel read-only tools; shrink `agent.py` | A fake provider streams events through `runtime.py`; read-only tools run in parallel with ordered results |
 | Wed | 2.5 to 3 h | Ctrl-C, steering, `edit_file` v2, `session.py`, `cli.py` | Ctrl-C mid-run leaves a session that resumes; `edit_file` v2 reports the closest candidate on a failed match |
-| Thu | 1.5 to 2 h | `AGENTS.md` loading; read pi's harness side and Aider against your own code | `AGENTS.md` loads into the system prompt; you can narrate pi's prompt-to-tool-result path from memory |
+| Thu | 2.5 to 3 h | `openai_chat.py` (OpenAI and OpenRouter); `AGENTS.md` loading; read pi's harness side and Aider against your own code | T04 passes on all three providers by flag; `AGENTS.md` loads into the system prompt; you can narrate pi's prompt-to-tool-result path from memory |
 | Fri | 1 to 1.5 h | Experiments 1 to 3 | `notes/week2-experiments.md`: parallel on/off, Aider-style edits, a reproduced fuzzy-match failure |
 | Sat | 3 to 4 h | Experiments 4 to 5; **Project increment**: v0.2 CLI, write T13 to T16 | Kill-and-resume verified; four new hidden-test tasks confirmed failing on a clean tree |
 | Sun | 2 to 3 h | Run T01 to T16 three times; answer remaining questions; attempt **Checkpoint** | v0.2 no worse than v0.1 on pass^3, or a redo list |
 
-**Starting this week already behind calendar?** `path.md`'s general rule is to drop that week's Experiments if you're short on time — but every step has a real dependency only on the step before it, not on its calendar day, so if you'd rather compress days than cut content, five sittings cover the same ground: Monday + Tuesday together (4 to 4.5 h); Wednesday unchanged; Thursday + Friday together (2.5 to 3.5 h — Experiments 1 to 3 only exercise code you've already built); Saturday unchanged; Sunday unchanged. If you're short on sittings as well as days, that's when dropping Experiments is the honest move.
+**Starting this week already behind calendar?** `path.md`'s general rule is to drop that week's Experiments if you're short on time — but every step has a real dependency only on the step before it, not on its calendar day, so if you'd rather compress days than cut content, five sittings cover the same ground: Monday + Tuesday together (4 to 4.5 h); Wednesday unchanged; Thursday + Friday together (3.5 to 4.5 h — Experiments 1 to 3 only exercise code you've already built); Saturday unchanged; Sunday unchanged. If you're short on sittings as well as days, that's when dropping Experiments is the honest move.
 
 ### Monday — map pi's three layers onto real lines of code.
 **Goal.** Point at the exact line where pi's harness hands control to its runtime, and explain why its runtime never imports a provider — before you build the same seams in rig tomorrow.
@@ -1019,33 +1023,67 @@ class Agent:
 **Done when** you can say, without looking: the harness hands off at `agent-session.ts:1899`, and `packages/agent` reaches a provider only through an injected function, never an import.
 
 ### Tuesday — provider, runtime, parallel execution.
-**Goal.** rig's loop becomes a generator of events over a swappable `Provider`; read-only tools run concurrently with results in call order; `agent.py` shrinks to a wrapper.
+**Goal.** rig's loop becomes a generator of events over a swappable `Provider` that speaks rig's own message types; read-only tools run concurrently with results in call order; `agent.py` shrinks to a wrapper.
 
-**Why.** Separating "call the model" from "run the loop" means a `FakeProvider` can drive the loop with no network, and tomorrow's cancellation and steering land in one file instead of all of `agent.py`.
+**Why.** Separating "call the model" from "run the loop" means a `FakeProvider` can drive the loop with no network, tomorrow's cancellation and steering land in one file instead of all of `agent.py`, and Thursday's second provider touches nothing outside `providers/`.
 
 **1. `providers/base.py`** — the vocabulary every other file speaks. Type this in as is:
 
 ```python
-@dataclass
-class TurnStart: ...
-@dataclass
-class MessageDelta:          # provider: a chunk of streamed text
+class Text(BaseModel):
+    type: Literal["text"] = "text"
     text: str
-@dataclass
-class ToolCall:              # provider: the model asked for a tool
+class Thinking(BaseModel):
+    type: Literal["thinking"] = "thinking"
+    text: str
+    signature: str | None = None      # opaque replay data: only the model that wrote it can read it
+class ToolCall(BaseModel):            # a message part, and a provider event: the model asked for a tool
+    type: Literal["tool_call"] = "tool_call"
     id: str
     name: str
     arguments: dict
-@dataclass
-class TurnEnd:               # provider: response finished; carries the full assistant content
-    stop_reason: str
-    usage: dict
-    content: list[dict]
-@dataclass
-class ToolStart:             # runtime: about to execute
+
+class UserMessage(BaseModel):
+    role: Literal["user"] = "user"
+    text: str
+class AssistantMessage(BaseModel):
+    role: Literal["assistant"] = "assistant"
+    content: list[Text | Thinking | ToolCall]
+    provider: str                     # who wrote it; decides whether its Thinking can be replayed
+    model: str
+class ToolResult(BaseModel):          # one per call, appended in call order
+    role: Literal["tool_result"] = "tool_result"
+    call_id: str
+    output: str
+    is_error: bool = False
+Message = Annotated[UserMessage | AssistantMessage | ToolResult, Field(discriminator="role")]
+
+class ToolSpec(BaseModel):            # each adapter wraps this in its own tool format
+    name: str
+    description: str
+    parameters: dict                  # JSON Schema
+class Context(BaseModel):             # everything one request needs, in rig's terms
+    system: str | None
+    messages: list[Message]
+    tools: list[ToolSpec]
+
+class Usage(BaseModel):               # input_tokens excludes cache reads, on every provider
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+StopReason = Literal["end_turn", "tool_use", "max_tokens", "refusal", "aborted"]
+
+class TurnStart(BaseModel): ...
+class MessageDelta(BaseModel):        # provider: a chunk of streamed text
+    text: str
+class TurnEnd(BaseModel):             # provider: response finished; carries the whole assistant message
+    stop_reason: StopReason
+    usage: Usage
+    message: AssistantMessage
+class ToolStart(BaseModel):           # runtime: about to execute
     call: ToolCall
-@dataclass
-class ToolEnd:               # runtime: finished, yielded in call order
+class ToolEnd(BaseModel):             # runtime: finished, yielded in call order
     call: ToolCall
     output: str
     is_error: bool
@@ -1053,40 +1091,44 @@ class ToolEnd:               # runtime: finished, yielded in call order
 Event = TurnStart | MessageDelta | ToolCall | TurnEnd | ToolStart | ToolEnd
 
 class Provider(Protocol):
-    def stream(self, request: dict) -> Iterator[Event]: ...
+    name: str                         # "anthropic", "openai", "openrouter", "fake"
+    model: str
+    def stream(self, context: Context) -> Iterator[Event]: ...
 ```
 
-Putting the full assistant `content` on `TurnEnd` means the runtime never reassembles deltas — pi does the same when its stream's `done` event hands back the final message ([`agent-loop.ts` L453–466](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L453-L466)). One difference, on purpose: pi's [`StreamFn` contract](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/types.ts#L19-L37) never throws and encodes failures as events; rig keeps raising `LLMError`, which `agent.py` already maps to a status.
+These are pydantic models (rig already depends on pydantic), so construct them with keyword arguments; in exchange, `TypeAdapter(Message).validate_python(d)` turns a stored dict back into the right class, which Wednesday's `session.py` needs. Each provider is built with its model and `max_tokens`, so `stream()` takes only the `Context`.
 
-**2. `providers/fake.py`** — `FakeProvider(script: list[list[Event]])`; each `stream()` call yields the next scripted list. Build the script with small helpers that make a text turn and a tool-call turn, like pi's [`fauxText`/`fauxToolCall`/`fauxAssistantMessage`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/providers/faux.ts#L54-L78).
+Why rig's own types instead of Anthropic's blocks: the runtime appends `end.message` and `ToolResult`s without knowing who wrote them, and each adapter's whole job becomes two translations, `Context` to a request body and the vendor's stream to rig `Event`s. `StopReason` and `Usage` are normalized inside the adapter, so `budget.charge` and the `max_tokens` check in `run_tools` work on any provider. Putting the whole assistant message on `TurnEnd` means the runtime never reassembles deltas — pi does the same when its stream's `done` event hands back the final message ([`agent-loop.ts` L453–466](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L453-L466)). One difference, on purpose: pi's [`StreamFn` contract](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/types.ts#L19-L37) never throws and encodes failures as events; rig keeps raising `LLMError`, which `agent.py` already maps to a status.
 
-**3. `providers/anthropic.py`** — `AnthropicProvider.stream()` opens the SDK's `client.messages.stream(**request)` and translates: each text delta → `MessageDelta`; once the stream ends, each `tool_use` block of the final message (`stream.get_final_message()`) → `ToolCall`, then one `TurnEnd` with `stop_reason`, `usage` and the final `content`. Don't parse partial tool-call JSON yourself; the final message has it complete. pi's version of the same translation is [`anthropic-messages.ts` L576](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/anthropic-messages.ts#L576) (the raw event names it handles are listed at [L399–401](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/anthropic-messages.ts#L399-L401)). This replaces `llm.py` on the live path.
+**2. `providers/fake.py`** — `FakeProvider(script: list[list[Event]])` with `name = "fake"`; each `stream(context)` call records the context and yields the next scripted list. Build the script with small helpers that make a text turn and a tool-call turn (each ending in a `TurnEnd` whose `AssistantMessage` holds the same parts), like pi's [`fauxText`/`fauxToolCall`/`fauxAssistantMessage`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/providers/faux.ts#L54-L78).
+
+**3. `providers/anthropic.py`** — two translations. *Request:* `to_request(context)` builds the Messages API body: `system` at the top level; each `ToolSpec` becomes `{name, description, input_schema}`; an `AssistantMessage` becomes content blocks (`Text` → `text`, `ToolCall` → `tool_use` with `input`, `Thinking` → `thinking` with its `signature`, but only when the message's `provider` and `model` match this provider's — otherwise drop it, as pi does in [`transform-messages.ts` L128–137](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/transform-messages.ts#L128-L137)); consecutive `ToolResult`s become **one** user message of `tool_result` blocks. *Response:* `client.messages.stream(**body)`; each text delta → `MessageDelta`; once the stream ends, `stream.get_final_message()` holds the complete message: each `tool_use` block → `ToolCall`, then one `TurnEnd` with the stop reason (Anthropic's names already match rig's), a `Usage` from `input_tokens`, `output_tokens`, `cache_read_input_tokens` and `cache_creation_input_tokens`, and an `AssistantMessage(provider="anthropic", ...)` built from the final content. Don't parse partial tool-call JSON yourself; the final message has it complete. Map the SDK's `APIStatusError` and `APIConnectionError` to `LLMError`. pi's version of the same translation is [`anthropic-messages.ts` L576](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/anthropic-messages.ts#L576) (the raw event names it handles are listed at [L399–401](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/anthropic-messages.ts#L399-L401)). This replaces `llm.py` on the live path.
 
 **4. `runtime.py`** — one generator, plus a small `Hooks` dataclass whose three fields default to "allow" and identity. Control flow:
 
 ```python
-def run(provider, messages, tools, budget, hooks) -> Iterator[Event]:
+def run(provider, system, messages, tools, budget, hooks) -> Iterator[Event]:
     while True:
         budget.check()
         yield TurnStart()
-        request = build_request(hooks.prepare_request(messages), tools)
+        context = Context(system=system, messages=hooks.prepare_request(messages), tools=tools)
         calls, end = [], None
-        for event in provider.stream(request):
+        for event in provider.stream(context):
             yield event                         # CLI prints deltas; agent.py traces everything
             if isinstance(event, ToolCall): calls.append(event)
             elif isinstance(event, TurnEnd): end = event
-        messages.append({"role": "assistant", "content": end.content})
+        messages.append(end.message)            # rig's own type: the runtime never sees vendor JSON
         if not calls:
             return                              # end_turn, refusal, truncated text
         results = yield from run_tools(calls, end.stop_reason, hooks)
-        messages.append({"role": "user", "content": tool_results(results)})
+        messages.extend(ToolResult(call_id=c.id, output=out, is_error=err) for c, out, err in results)
 ```
 
 Compare with pi's `runLoop`: `prepareRequest` is called every turn, including the first ([L228](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L228-L248)), and a `length` (`max_tokens`) stop fails every tool call instead of running it ([L276](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L276-L279), [L488](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L488-L513)) — move your Week 1 `max_tokens` handler into `run_tools` unchanged.
 
 **5. Parallel tools, inside `run_tools`** — give each registered tool a `read_only` flag (`list_files`, `read_file`, `search`: true; `edit_file`, `bash`: false). If every call in the batch is read-only, run them with `ThreadPoolExecutor.map`, which returns results in submission order; otherwise run the batch sequentially — pi applies the same rule ([`executeToolCalls`, L518–533](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L518-L533)) and gets its ordering from `Promise.all` ([L656](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L596-L670)). Call `hooks.before_tool` before each call (a deny becomes an `is_error` result, like [`prepareToolCall`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L718-L787)) and `hooks.after_tool` after ([`finalizeExecutedToolCall`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L869-L920)). Guard `edit_file` with a lock per resolved path (`dict[Path, threading.Lock]`, keyed by `Path.resolve()`), the way [`withFileMutationQueue`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/tools/file-mutation-queue.ts#L32) keys by `realpath`.
 
-**6. `agent.py`** (Week 1's `loop.py`, renamed) — keep the entry point the eval harness calls exactly as it is: `run_agent(task, ws=..., model=..., budget=..., trace=...)` now just builds an `Agent` and returns `Agent.run()`. Inside, `run()` builds the provider and hooks, iterates `runtime.run(...)`, writes one trace event per `Event`, and builds the result from the final messages. That's pi's [`processEvents`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent.ts#L575-L622) pattern: update state first, then notify listeners.
+**6. `agent.py`** (Week 1's `loop.py`, renamed) — keep the entry point the eval harness calls exactly as it is: `run_agent(task, ws=..., model=..., budget=..., trace=...)` now just builds an `Agent` and returns `Agent.run()`. Inside, `run()` builds the provider with `get_provider(provider, model)` (from a new `provider="anthropic"` keyword, so existing callers don't change), turns Week 1's tool registry into `ToolSpec`s (its `input_schema` is the `parameters`), builds the hooks, iterates `runtime.run(...)`, writes one trace event per `Event`, and builds the result from the final messages. That's pi's [`processEvents`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent.ts#L575-L622) pattern: update state first, then notify listeners.
 
 `run_tools`, the one function where parallelism, ordering, truncation and the hooks all meet:
 
@@ -1095,7 +1137,7 @@ def run_tools(calls, stop_reason, hooks):            # a generator; returns resu
     if stop_reason == "max_tokens":                  # arguments may be cut off: run nothing
         results = [(c, TRUNCATED_MSG, True) for c in calls]
     else:
-        for c in calls: yield ToolStart(c)
+        for c in calls: yield ToolStart(call=c)
         def one(c):
             verdict = hooks.before_tool(c)
             if verdict is not ALLOW: return c, f"Blocked: {verdict.reason}", True
@@ -1106,11 +1148,11 @@ def run_tools(calls, stop_reason, hooks):            # a generator; returns resu
             results = list(POOL.map(one, calls))     # map() keeps submission order
         else:
             results = [one(c) for c in calls]
-    for c, out, is_error in results: yield ToolEnd(c, out, is_error)
+    for c, out, is_error in results: yield ToolEnd(call=c, output=out, is_error=is_error)
     return results
 ```
 
-Tests, in `tests/test_runtime.py`, all driven by `FakeProvider` (no network, no cost): a text-only turn ends the loop; one tool call round-trips; three read-only calls whose fake tools sleep 0.3, 0.1 and 0.2 seconds come back in call order and finish in under 0.5 seconds total; a mixed batch with `edit_file` runs sequentially; a `max_tokens` turn runs no tool.
+Tests, in `tests/test_runtime.py`, all driven by `FakeProvider` (no network, no cost): a text-only turn ends the loop; one tool call round-trips; three read-only calls whose fake tools sleep 0.3, 0.1 and 0.2 seconds come back in call order and finish in under 0.5 seconds total; a mixed batch with `edit_file` runs sequentially; a `max_tokens` turn runs no tool. In `tests/test_providers.py`, test `AnthropicProvider.to_request` directly (no network): three `ToolResult`s in a row become one user message of three `tool_result` blocks, and a `Thinking` part from an `AssistantMessage` with `provider="openai"` produces no `thinking` block.
 
 **Done when:** a `FakeProvider` scripted with three read-only calls runs through `runtime.run()` and the trace shows `ToolEnd`s in call order; one live run streams text as it arrives; `python evals/run_evals.py --task-id T04` still passes.
 
@@ -1119,10 +1161,10 @@ Tests, in `tests/test_runtime.py`, all driven by `FakeProvider` (no network, no 
 
 **Why.** An abort that leaves a `tool_use` without its `tool_result` corrupts the transcript itself: the very next request fails. An edit that fails silently, or a fuzzy edit that lands on the wrong block, erodes trust faster than an honest error. An append-only log makes resume and fork nearly free, because nothing is ever rewritten.
 
-1. **Ctrl-C, in `runtime.py` and `cli.py`** — `cli.py` installs `signal.signal(signal.SIGINT, handler)`; the first press sets a `threading.Event` passed into `runtime.run()`, the second calls `sys.exit`. Don't catch `KeyboardInterrupt` directly: the [`signal` docs](https://docs.python.org/3/library/signal.html) warn it can land mid-bytecode and leave state inconsistent. The runtime checks the event between stream events and before each tool; on abort it yields an `is_error` "aborted" `ToolEnd` for every call not yet answered, then a `TurnEnd(stop_reason="aborted")`. pi's version: [`abort()`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent.ts#L350) only fires a signal, the loop checks it at safe points ([L629–638](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L629-L638)), and a failed run still emits a well-formed final message through the normal events ([`handleRunFailure`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent.ts#L542-L558)). As a last line of defense, also add pi's orphan pass to `build_request`: any `tool_use` without a result gets a synthetic one before the request goes out ([`closePendingToolCalls`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/transform-messages.ts#L179-L207)).
+1. **Ctrl-C, in `runtime.py` and `cli.py`** — `cli.py` installs `signal.signal(signal.SIGINT, handler)`; the first press sets a `threading.Event` passed into `runtime.run()`, the second calls `sys.exit`. Don't catch `KeyboardInterrupt` directly: the [`signal` docs](https://docs.python.org/3/library/signal.html) warn it can land mid-bytecode and leave state inconsistent. The runtime checks the event between stream events and before each tool; on abort it yields an `is_error` "aborted" `ToolEnd` for every call not yet answered, then a `TurnEnd(stop_reason="aborted")`. pi's version: [`abort()`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent.ts#L350) only fires a signal, the loop checks it at safe points ([L629–638](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L629-L638)), and a failed run still emits a well-formed final message through the normal events ([`handleRunFailure`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent.ts#L542-L558)). As a last line of defense, also add pi's orphan pass to the runtime, just before `provider.stream(context)`: any `ToolCall` without a matching `ToolResult` gets a synthetic one before the request goes out — it runs on rig's own types, so it protects every provider at once ([`closePendingToolCalls`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/transform-messages.ts#L179-L207)).
 2. **Steering and follow-up** — `agent.py` owns two `queue.Queue`s; `cli.py` puts typed lines into one or the other; `runtime.run()` takes `get_steering()` and `get_follow_up()` callables. Drain steering after each tool batch and append it before the next request; drain follow-up only when a turn ends with no tool calls and no steering, and if it returns messages, keep looping. That's exactly pi's timing: steering polled at [L185](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L185) and [L304](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L304), follow-up only after the inner loop exits ([L311](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L310-L317)), with the queues themselves in [`PendingMessageQueue`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent.ts#L149-L180).
 3. **`edit_file` v2, in `tools/fs.py`** — detect the file's line ending, normalize file and `old_text` to LF, match, then restore the original ending on write ([`detectLineEnding`/`normalizeToLF`/`restoreLineEndings`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/tools/edit-diff.ts#L11-L31)). Accept `edits: list[{old_text, new_text}]`: validate every edit against the original content first, apply only if all match exactly once — all or nothing ([`applyEditsToNormalizedContent`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/tools/edit-diff.ts#L300)). When an edit doesn't match, raise `ToolError` naming which edit failed and listing the closest lines from `difflib.get_close_matches` — never apply them. Don't port `fuzzyFindText`; reproducing its failure is Friday's Experiment 3.
-4. **`session.py`** — `SessionLog(path)` with `append(type, payload, parent_id) -> id` (one flushed JSON line per entry: `{id, parent_id, type, payload}`), `load()`, and `branch(leaf_id)`, which walks `parent_id`s back to the root and returns the messages along that path. Resume = load, then continue from the last entry; fork = continue from any earlier `entry_id`, so new entries get it as `parent_id` and nothing is ever rewritten. `agent.py` appends every message as it goes. pi's equivalents: entry types ([L57](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/session-manager.ts#L57), [L183](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/session-manager.ts#L183)), [`appendMessage`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/session-manager.ts#L1204), [`getBranch`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/session-manager.ts#L1469), [`buildSessionContext`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/session-manager.ts#L1497), [`branch`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/session-manager.ts#L1579).
+4. **`session.py`** — `SessionLog(path)` with `append(type, payload, parent_id) -> id` (one flushed JSON line per entry: `{id, parent_id, type, payload}`), `load()`, and `branch(leaf_id)`, which walks `parent_id`s back to the root and returns the messages along that path. Resume = load, then continue from the last entry; fork = continue from any earlier `entry_id`, so new entries get it as `parent_id` and nothing is ever rewritten. `agent.py` appends every message as it goes, stored as `message.model_dump()`; because messages are rig's own types, a session recorded on one provider resumes on another. pi's equivalents: entry types ([L57](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/session-manager.ts#L57), [L183](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/session-manager.ts#L183)), [`appendMessage`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/session-manager.ts#L1204), [`getBranch`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/session-manager.ts#L1469), [`buildSessionContext`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/session-manager.ts#L1497), [`branch`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/session-manager.ts#L1579).
 5. **`cli.py`** — `argparse` subcommands: `rig run --task ...` (today's `scripts/run_agent.py`), `rig resume <session>`, `rig fork <session> <entry_id>`. While a run streams, read lines from stdin on a background thread; a line prefixed `/steer` goes to the steering queue, anything else to follow-up.
 
 Where the abort checks and the queue drains sit inside Tuesday's loop — the only lines that change:
@@ -1132,8 +1174,13 @@ for event in provider.stream(request):
     if abort.is_set(): break                          # check between stream events
     ...
 if abort.is_set():                                    # every unanswered call still gets a result
-    for c in calls: yield ToolEnd(c, "Aborted by user", True)
-    yield TurnEnd("aborted", usage={}, content=[])
+    # text_so_far: [Text(text="".join(deltas))] from the MessageDeltas seen before the abort, or []
+    partial = AssistantMessage(content=[*text_so_far, *calls], provider=provider.name, model=provider.model)
+    messages.append(partial)
+    for c in calls:
+        yield ToolEnd(call=c, output="Aborted by user", is_error=True)
+        messages.append(ToolResult(call_id=c.id, output="Aborted by user", is_error=True))
+    yield TurnEnd(stop_reason="aborted", usage=Usage(), message=partial)
     return
 results = yield from run_tools(calls, end.stop_reason, hooks, abort)   # run_tools checks abort per call
 steer = get_steering()                                # after the batch, before the next request
@@ -1146,32 +1193,35 @@ messages.extend(steer)
 And the one non-obvious piece of `session.py`, rebuilding a branch:
 
 ```python
-def branch(self, leaf_id) -> list[dict]:              # resume = branch(last id); fork = branch(entry_id)
+MESSAGE = TypeAdapter(Message)                        # dict -> UserMessage | AssistantMessage | ToolResult
+
+def branch(self, leaf_id) -> list[Message]:           # resume = branch(last id); fork = branch(entry_id)
     by_id = {e["id"]: e for e in self.load()}
     path, cur = [], by_id[leaf_id]
     while cur:
         path.append(cur)
         cur = by_id.get(cur["parent_id"])
-    return [e["payload"] for e in reversed(path) if e["type"] == "message"]
+    return [MESSAGE.validate_python(e["payload"]) for e in reversed(path) if e["type"] == "message"]
 ```
 
-Tests: `tests/test_abort.py` — set the abort event at three points of a `FakeProvider` run (mid-stream, mid-parallel-batch, mid-edit) and assert that every `tool_use` in the resulting messages has a matching `tool_result` and that a resumed run's first request passes your orphan check. `tests/test_edit_file_v2.py` — a CRLF file keeps its CRLF after an edit; a two-edit list where the second misses leaves the file byte-identical; a near miss names the closest line in the error. `tests/test_session.py` — append five entries, fork from the third, append two more; the branch from the new leaf has five messages, and the file still holds all seven lines.
+Tests: `tests/test_abort.py` — set the abort event at three points of a `FakeProvider` run (mid-stream, mid-parallel-batch, mid-edit) and assert that every `ToolCall` in the resulting messages has a matching `ToolResult` and that a resumed run's first request passes your orphan check. `tests/test_edit_file_v2.py` — a CRLF file keeps its CRLF after an edit; a two-edit list where the second misses leaves the file byte-identical; a near miss names the closest line in the error. `tests/test_session.py` — append five entries, fork from the third, append two more; the branch from the new leaf has five messages, and the file still holds all seven lines.
 
 **Done when:** Ctrl-C during streaming, during a parallel tool batch, and during an edit each leaves a session that `rig resume` continues and the API accepts — one test per case, driven by `FakeProvider`.
 
-### Thursday — AGENTS.md, then read pi's harness against your own code.
-**Goal.** Project instructions reach the model; you can narrate pi's prompt-to-tool-result path and its failure path from the trace alone.
+### Thursday — a second provider, AGENTS.md, then read pi's harness against your own code.
+**Goal.** rig runs the same task on OpenAI and OpenRouter by changing one flag; project instructions reach the model; you can narrate pi's prompt-to-tool-result path and its failure path from the trace alone.
 
-**Why.** You've now built your own answers to every problem pi's harness solves. Reading pi after building gives you something to compare against, instead of ideas to copy.
+**Why.** A provider interface is only proven provider-neutral once a second, differently shaped API sits behind it; until then, Anthropic's assumptions hide in it unnoticed. And you've now built your own answers to every problem pi's harness solves, so reading pi after building gives you something to compare against, instead of ideas to copy.
 
-1. **Build step 7, in `agent.py`** where the system prompt is assembled: if `ws.root / "AGENTS.md"` exists, append it wrapped as `<project_instructions path="AGENTS.md">...</project_instructions>`, after the base prompt — pi's [`renderProjectContext`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/system-prompt.ts#L79-L86). Repo root only this week; pi also searches parent directories and `CLAUDE.md` variants ([`resource-loader.ts` L212](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/resource-loader.ts#L212)), which you don't need yet.
-2. Read each pi file side by side with the rig file you wrote for the same job: [`edit-diff.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/tools/edit-diff.ts) vs. your `edit_file` v2; [`file-mutation-queue.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/tools/file-mutation-queue.ts) (61 lines) vs. your path lock; [`truncate.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/tools/truncate.ts#L78) (`truncateHead` L78, `truncateTail` L168) vs. your Week 1 `truncate`; `agent-session.ts` [`_queueSteer`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/agent-session.ts#L2302-L2327) and [`abort`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/agent-session.ts#L2498-L2508) vs. your `cli.py`. Then Aider's edit cascade for contrast: [`perfect_replace`](https://github.com/Aider-AI/aider/blob/5dc9490bb35f9729ef2c95d00a19ccd30c26339c/aider/coders/editblock_coder.py#L146) → [`replace_part_with_missing_leading_whitespace`](https://github.com/Aider-AI/aider/blob/5dc9490bb35f9729ef2c95d00a19ccd30c26339c/aider/coders/editblock_coder.py#L243) → [`try_dotdotdots`](https://github.com/Aider-AI/aider/blob/5dc9490bb35f9729ef2c95d00a19ccd30c26339c/aider/coders/editblock_coder.py#L190) → [`replace_closest_edit_distance`](https://github.com/Aider-AI/aider/blob/5dc9490bb35f9729ef2c95d00a19ccd30c26339c/aider/coders/editblock_coder.py#L296).
-3. Trace the paths in **Read: pi (main) and Aider's edit blocks (contrast)** below: the happy path, then the failure path.
-4. Answer questions 1 to 4 in **You should be able to answer** from the trace alone.
+1. **`providers/openai_chat.py`** — `OpenAIChatProvider(model, max_tokens, base_url=None, api_key_env="OPENAI_API_KEY", name="openai")` on the official [`openai`](https://github.com/openai/openai-python) SDK (`uv add openai`), using [Chat Completions](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create) because OpenRouter ([quickstart](https://openrouter.ai/docs/quickstart): `base_url="https://openrouter.ai/api/v1"`, key in `OPENROUTER_API_KEY`), vLLM and [Ollama](https://docs.ollama.com/api/openai-compatibility) accept the same format; `get_provider("openrouter", model)` is this class with OpenRouter's `base_url`, key and name. *Request:* the system prompt becomes the first message (`role: "system"`); each `ToolSpec` becomes `{"type": "function", "function": {name, description, parameters}}`; an `AssistantMessage` becomes `{role: "assistant", content, tool_calls: [{id, type: "function", function: {name, arguments: json.dumps(...)}}]}` with its `Thinking` parts dropped; each `ToolResult` becomes its own `{role: "tool", tool_call_id, content}` message. *Response:* `client.chat.completions.create(**body, stream=True, stream_options={"include_usage": True})`; each `delta.content` → `MessageDelta`. Tool calls arrive as fragments keyed by `index`: the first fragment for an index carries `id` and `function.name`, later ones only pieces of `function.arguments`, so accumulate them per index and `json.loads` each argument string only once the stream ends; if one doesn't parse, emit the `ToolCall` with `{}` and have `run_tools` return an `is_error` result quoting the bad JSON, the way pi's `argumentsError` does. Map `finish_reason`: `stop` → `end_turn`, `tool_calls` → `tool_use`, `length` → `max_tokens`, `content_filter` → `refusal`. The final chunk has empty `choices` and carries `usage`; `prompt_tokens` *includes* cached tokens, so `input_tokens = prompt_tokens - prompt_tokens_details.cached_tokens`, and `output_tokens = completion_tokens`. pi's same adapter: [`stream`, L309](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/openai-completions.ts#L309), accumulation by index in [`ensureToolCallBlock`, L505](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/openai-completions.ts#L505-L512) and [L661–690](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/openai-completions.ts#L661-L690), [`convertMessages`, L1204](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/openai-completions.ts#L1204), [`convertTools`, L1497](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/openai-completions.ts#L1497), [`parseChunkUsage`, L1534–1580](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/openai-completions.ts#L1534-L1580) and [`mapStopReason`, L1582–1606](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/openai-completions.ts#L1582-L1606). Finally, add `--provider anthropic|openai|openrouter` to `cli.py` and `run_evals.py` (default `anthropic`, so existing runs don't change), and add rates for the models you'll use to `rig/costs/`.
+2. **Build step 7, in `agent.py`** where the system prompt is assembled: if `ws.root / "AGENTS.md"` exists, append it wrapped as `<project_instructions path="AGENTS.md">...</project_instructions>`, after the base prompt — pi's [`renderProjectContext`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/system-prompt.ts#L79-L86). Repo root only this week; pi also searches parent directories and `CLAUDE.md` variants ([`resource-loader.ts` L212](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/resource-loader.ts#L212)), which you don't need yet.
+3. Read each pi file side by side with the rig file you wrote for the same job: [`edit-diff.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/tools/edit-diff.ts) vs. your `edit_file` v2; [`file-mutation-queue.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/tools/file-mutation-queue.ts) (61 lines) vs. your path lock; [`truncate.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/tools/truncate.ts#L78) (`truncateHead` L78, `truncateTail` L168) vs. your Week 1 `truncate`; `agent-session.ts` [`_queueSteer`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/agent-session.ts#L2302-L2327) and [`abort`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/agent-session.ts#L2498-L2508) vs. your `cli.py`. Then Aider's edit cascade for contrast: [`perfect_replace`](https://github.com/Aider-AI/aider/blob/5dc9490bb35f9729ef2c95d00a19ccd30c26339c/aider/coders/editblock_coder.py#L146) → [`replace_part_with_missing_leading_whitespace`](https://github.com/Aider-AI/aider/blob/5dc9490bb35f9729ef2c95d00a19ccd30c26339c/aider/coders/editblock_coder.py#L243) → [`try_dotdotdots`](https://github.com/Aider-AI/aider/blob/5dc9490bb35f9729ef2c95d00a19ccd30c26339c/aider/coders/editblock_coder.py#L190) → [`replace_closest_edit_distance`](https://github.com/Aider-AI/aider/blob/5dc9490bb35f9729ef2c95d00a19ccd30c26339c/aider/coders/editblock_coder.py#L296).
+4. Trace the paths in **Read: pi (main) and Aider's edit blocks (contrast)** below: the happy path, then the failure path.
+5. Answer questions 1 to 4 in **You should be able to answer** from the trace alone.
 
-Test: in a `tmp_path` workspace with an `AGENTS.md` containing a marker string, the first request the `FakeProvider` receives has the marker inside `<project_instructions>`; without the file, the system prompt is unchanged from Week 1.
+Tests: in `tests/test_providers.py`, give `OpenAIChatProvider` a stub client that returns hand-built chunks for a turn with two tool calls whose argument strings are split across chunks, and check that two `ToolCall`s with parsed arguments come out in `index` order and the `TurnEnd` has `stop_reason="tool_use"`; `to_request` turns three `ToolResult`s into three `tool` messages. In a `tmp_path` workspace with an `AGENTS.md` containing a marker string, the first `Context` the `FakeProvider` receives has the marker inside `<project_instructions>`; without the file, the system prompt is unchanged from Week 1.
 
-**Done when:** that test passes and you can answer questions 1 to 4 without reopening pi.
+**Done when:** those tests pass; `python evals/run_evals.py --task-id T04 --provider openai` and `--provider openrouter` both pass; and you can answer questions 1 to 4 without reopening pi.
 
 ### Friday — break the harness on purpose.
 **Goal.** Numbers on which of Tuesday's and Wednesday's changes actually mattered.
@@ -1185,7 +1235,7 @@ Run Experiments 1 to 3 against T04 to T11 and write pass rate, steps, tokens and
 
 **Why.** v0.2 is judged on tasks you design, not only ones handed to you — writing a task whose hidden test fails before the fix is the skill.
 
-1. Experiment 4: kill rig mid-tool (`kill -9`, not Ctrl-C), `rig resume`, check the API accepts the transcript; then `rig fork` from step 3 and rerun. Experiment 5: point `Provider` at a second API and list every normalization you needed — pi's list is a good checklist: tool-call ID formats ([`transform-messages.ts` L86–90](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/transform-messages.ts#L86-L95)), reasoning from another model ([L128–137](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/transform-messages.ts#L128-L137)), orphaned tool calls ([L179–207](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/transform-messages.ts#L179-L207)), stop reasons, usage fields.
+1. Experiment 4: kill rig mid-tool (`kill -9`, not Ctrl-C), `rig resume`, check the API accepts the transcript; then `rig fork` from step 3 and rerun. Experiment 5: you built the second provider on Thursday; now run T01 to T12 once on each of Anthropic, OpenAI and OpenRouter, and record in `notes/week2-experiments.md` the pass rate and cost per provider and every normalization you needed — pi's list is a good checklist: tool-call ID formats ([`transform-messages.ts` L86–90](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/transform-messages.ts#L86-L95)), reasoning from another model ([L128–137](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/transform-messages.ts#L128-L137)), orphaned tool calls ([L179–207](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/transform-messages.ts#L179-L207)), stop reasons, usage fields.
 2. Write T13 to T16 per **Project increment** below, appended to `evals/tasks/week1.yaml` with hidden tests in `evals/hidden/`. Confirm each hidden test fails on a fresh `create_snapshot()` of click before you call the task done — the same recipe as T10 and T11.
 3. Run the CLI end to end on all four: streaming output, a steer message injected mid-run, a resumed session.
 
@@ -1206,9 +1256,10 @@ Run Experiments 1 to 3 against T04 to T11 and write pass rate, steps, tokens and
 5. [ ] `edit_file` v2: normalize CRLF to LF for matching and restore on write; accept a list of edits applied atomically (all or nothing); if an exact match fails, report the closest candidate lines in the error instead of silently applying a fuzzy match.
 6. [ ] `rig/session.py`: append-only JSONL entries `{id, parent_id, type, payload}`; `rig resume <session>` and `rig fork <session> <entry_id>`.
 7. [ ] Load `AGENTS.md` from the repo root into the system prompt inside a clearly delimited block.
+8. [ ] `rig/providers/openai_chat.py`: one Chat Completions adapter for OpenAI, OpenRouter and any OpenAI-compatible endpoint, chosen with `--provider`. The runtime, session log and trace use rig's own message types, never a vendor's JSON.
 
 ## Project increment
-rig v0.2: a streaming CLI with interruptible runs and resumable sessions. Write four multi-file tasks of your own for the eval set (T13 to T16). One example: "Add a `click.Port` parameter type that accepts integers 1 to 65535, is exported from `click/__init__.py`, and describes its range in `--help`", graded by a hidden test you write first and confirm fails on the clean tree.
+rig v0.2: a streaming CLI with interruptible runs and resumable sessions that runs on Anthropic, OpenAI or OpenRouter. Write four multi-file tasks of your own for the eval set (T13 to T16). One example: "Add a `click.Port` parameter type that accepts integers 1 to 65535, is exported from `click/__init__.py`, and describes its range in `--help`", graded by a hidden test you write first and confirm fails on the clean tree.
 
 ## Read: pi (main) and Aider's edit blocks (contrast)
 The day-by-day sections above link straight to the lines each day needs. This section is the consolidated map, plus the two paths to trace on Thursday.
@@ -1218,7 +1269,7 @@ The day-by-day sections above link straight to the lines each day needs. This se
 1. [`packages/agent/src/agent-loop.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts): `runLoop` (L172), `streamAssistantResponse` (L390), `failToolCallsFromTruncatedMessage` (L488), `executeToolCalls` (L518), `executeToolCallsParallel` (L596), `prepareToolCall` (L718).
 2. [`packages/agent/src/types.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/types.ts#L193): `AgentLoopConfig`, especially `convertToLlm`, `transformContext`, `prepareRequest`, `prepareNextTurn`, `finishTurn`, `getSteeringMessages`, `getFollowUpMessages`, `beforeToolCall`, `afterToolCall`.
 3. [`packages/agent/src/agent.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent.ts#L194): the stateful `Agent` wrapper — `prompt` (L382), `continue` (L393), `createLoopConfig` (L476), `processEvents` (L575).
-4. [`packages/ai/src/api/transform-messages.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/transform-messages.ts#L91): `transformMessages`, the cross-provider normalization step.
+4. [`packages/ai/src/api/transform-messages.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/transform-messages.ts#L91): `transformMessages`, the cross-provider normalization step; then [`packages/ai/src/api/openai-completions.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/openai-completions.ts#L309), the Chat Completions adapter that also serves OpenRouter: `stream` (L309), `convertMessages` (L1204), `convertTools` (L1497), `parseChunkUsage` (L1534), `mapStopReason` (L1582).
 5. [`packages/coding-agent/src/core/tools/`](https://github.com/earendil-works/pi/tree/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/tools): `edit.ts` with `edit-diff.ts` (`normalizeToLF`, `detectLineEnding`, `fuzzyFindText`), `truncate.ts` (`truncateHead`, `truncateTail`; defaults of 2,000 lines and 50 KB), `file-mutation-queue.ts` (`withFileMutationQueue`, 61 lines), `bash.ts`.
 6. [`packages/coding-agent/src/core/system-prompt.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/system-prompt.ts) (`buildSystemPromptSections`, `renderProjectContext`) and the context-file candidates in [`resource-loader.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/resource-loader.ts#L212) (`AGENTS.md`, `CLAUDE.md` and variants).
 7. [`packages/coding-agent/src/core/session-manager.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/session-manager.ts): the entry types near the top, then `appendMessage` (L1204), `getBranch` (L1469), `buildSessionContext` (L1497), `branch` (L1579).
@@ -1240,6 +1291,7 @@ If you want a third data point, open a few of your own Claude Code transcripts (
 7. [ ] Why is the agent's message type different from the provider's message type, and where does `convertToLlm` run?
 8. [ ] How does a branched session rebuild the model's context from a leaf entry?
 9. [ ] Why does `_omitRecoveryAttempt` append a context-edit entry instead of deleting the failed message?
+10. [ ] Which differences between Anthropic's Messages API and OpenAI's Chat Completions does each adapter absorb, and why is thinking written by one model dropped before the conversation goes to another?
 
 ## Experiments
 1. [ ] Run rig's eval set with parallel read-only tools on and off. Record wall time and whether results change.
@@ -1255,12 +1307,13 @@ If you want a third data point, open a few of your own Claude Code transcripts (
 - **Rate limits** under parallel evals: a shared token bucket across runs, not per-run backoff alone.
 
 ## Not yet
-Other harnesses (OpenCode, Codex CLI, OpenHands) beyond the files named here; pi's `packages/durable`, `mcp`, `server` and `codemode`; TUI rendering code; provider-specific features such as server-side tools.
+Other harnesses (OpenCode, Codex CLI, OpenHands) beyond the files named here; pi's `packages/durable`, `mcp`, `server` and `codemode`; TUI rendering code; provider-specific features such as server-side tools; OpenAI's Responses API (better for its reasoning models, but served only by OpenAI); choosing between providers per request, which a later week's model router covers.
 
 ## Checkpoint
 - [ ] You can draw pi's three layers and place every file you read in one of them.
 - [ ] Ctrl-C at any moment (during streaming, during a parallel batch, during an edit) leaves a session that resumes and passes API validation. You have a test for each case.
 - [ ] On T01 to T16, rig v0.2 is no worse than v0.1 on pass^3, and you can explain any task whose result changed by pointing at trace events.
+- [ ] T04 passes on Anthropic, OpenAI and OpenRouter by changing only `--provider`, and `runtime.py` imports no vendor SDK.
 
 ---
 
@@ -1294,7 +1347,7 @@ Reference code on this page is pinned so line numbers never drift: [pi](https://
 |---|---|---|---|
 | `rig/context.py` | Estimate tokens per segment before a request; record provider `usage` per segment after | pi's [`estimateTokens`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts#L298) | Tue |
 | `rig/shrink.py` | One `Shrinker` interface; masking and compaction (Tue), clearing and server compaction (Wed) | pi's [`compaction.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts#L859) | Tue, Wed |
-| `rig/cache_policy.py` | Where breakpoints go and which TTL each gets; optional pre-warm | pi's [`getCacheControl`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/anthropic-messages.ts#L84) and [`CacheWarmer`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/cache-warmer.ts#L162) | Tue (breakpoints), Wed (TTL) |
+| `rig/cache_policy.py` | Where breakpoints go and which TTL each gets, applied to the Anthropic request body; optional pre-warm | pi's [`getCacheControl`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/anthropic-messages.ts#L84) and [`CacheWarmer`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/cache-warmer.ts#L162) | Tue (breakpoints), Wed (TTL) |
 | `rig/ledger.py` | Per request: tokens that should have been cached but weren't, their cost, the likely cause | pi's [`cache-stats.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/cache-stats.ts#L56) | Wed |
 | `rig/kvtoy.py` | A radix tree over token ids, to replay old traces and see what a server could have reused | SGLang's [`radix_cache.py`](https://github.com/sgl-project/sglang/blob/b068417bfcc19ba14e6588ce96d31e406077e6aa/python/sglang/srt/mem_cache/radix_cache.py#L364) | Wed |
 | `rig/tools/note.py`, `.rig/notes.md` | A `note` tool the agent uses to write working memory, loaded at session start | — | Wed |
@@ -1325,14 +1378,18 @@ def prepare_request(messages):
         messages = shrinker.shrink(messages)                      # Tue/Wed: one interface, four strategies
         session.append("compaction", summary_entry)               # originals stay in the log
     view = masking.view(messages, keep_turns=K)                   # Tue: masks in batches, not every turn
-    return cache_policy.place(view, ttl=cache_policy.choose_ttl(expected_idle_s))   # Tue/Wed
+    return view                                                   # rig's own types: no cache markers here
+
+# breakpoints are an Anthropic feature, so they go on the Anthropic request body, never on rig's messages
+provider = AnthropicProvider(model, transform=lambda body: cache_policy.place(
+    body, ttl=cache_policy.choose_ttl(expected_idle_s)))          # Tue/Wed
 
 # after every response, in agent.events()
 context.record(segments, resp.usage)                              # Tue: ground truth into the trace
 ledger.record(request, resp.usage, previous_request)              # Wed: expected vs actual cache reads -> $, cause
 
 # reactive trigger, wrapped around runtime.run()
-except ContextOverflow:                                           # provider maps "too long" to a typed error
+except ContextOverflow:                                           # each adapter maps its own "too long" error
     messages = shrinker.shrink(messages); retry once              # never a loop
 ```
 
@@ -1366,11 +1423,11 @@ except ContextOverflow:                                           # provider map
 
 **Why.** These four steps are the path every request takes, in order: measure what you're sending, decide what's cacheable, then shrink history before it overflows anything. Getting them right first gives Wednesday's measurement tools real data.
 
-1. **`rig/context.py`** — `estimate(system, tools, messages) -> Segments` (tokens for tools, system, memory, history, latest turn; `chars / 4` is fine for planning) and `record(segments, usage)`, which writes the provider's `input_tokens`, `cache_read_input_tokens` and `cache_creation_input_tokens` into the trace next to the estimate. Add `peak_input_tokens` and `cache_read_ratio` to `evals/report.py`. pi's estimator is [`estimateTokens`, L298](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts#L298).
-2. **Breakpoints, in `cache_policy.py`** — `place(messages)` puts `cache_control` on the last tool definition, on the system prompt, and on the last block of the newest message: three of your four allowed breakpoints. pi does exactly this: tools at [L1677](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/anthropic-messages.ts#L1677), history at [L1547–1568](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/anthropic-messages.ts#L1547-L1568). Then remove every source of churn: serialize tool schemas with `json.dumps(..., sort_keys=True)`, register tools in a fixed order, and keep the date or cwd out of the system prompt (append it to the newest user message instead).
+1. **`rig/context.py`** — `estimate(system, tools, messages) -> Segments` (tokens for tools, system, memory, history, latest turn; `chars / 4` is fine for planning) and `record(segments, usage)`, which writes the `Usage` your Week 2 adapter normalized (`input_tokens`, `cache_read_tokens`, `cache_write_tokens`) into the trace next to the estimate. Add `peak_input_tokens` and `cache_read_ratio` to `evals/report.py`. pi's estimator is [`estimateTokens`, L298](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts#L298).
+2. **Breakpoints, in `cache_policy.py`** — breakpoints are an Anthropic request feature, so `place(body, ttl)` works on the request body `AnthropicProvider.to_request` built, not on rig's messages: give `AnthropicProvider` an optional `transform(body) -> body` that runs after `to_request`, and pass `place` as it. `place` puts `cache_control` on the last tool definition, on the system prompt, and on the last block of the newest message: three of your four allowed breakpoints. OpenAI caches matching prefixes without markers by default ([prompt caching](https://developers.openai.com/api/docs/guides/prompt-caching)), so `openai_chat.py` needs no transform; for OpenRouter, which models accept markers depends on the upstream provider ([prompt caching](https://openrouter.ai/docs/features/prompt-caching)). pi places Anthropic's markers inside its Anthropic adapter too: tools at [L1677](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/anthropic-messages.ts#L1677), history at [L1547–1568](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/anthropic-messages.ts#L1547-L1568). Then remove every source of churn: serialize tool schemas with `json.dumps(..., sort_keys=True)`, register tools in a fixed order, and keep the date or cwd out of the system prompt (append it to the newest user message instead).
 3. **Masking, in `shrink.py`** — `Masking.view(messages, keep_turns=K)` returns a copy where every tool result older than K turns becomes `[elided: 4,812 chars from read_file src/click/core.py; call again if needed]`. Opinion: mask in batches — only when the oldest unmasked result is 2K turns old, mask everything older than K in one go — because every masking pass changes early bytes and costs one cache miss; batching turns a miss per turn into a miss every K turns.
 4. **Compaction, in `shrink.py`** — `Compaction.shrink(messages)`: find the latest safe cut point (a turn boundary that doesn't split a `tool_use` from its `tool_result`), summarize everything before it with the cheap model and a fixed template (task, decisions, files touched with what changed, current state, next step), keep the turns after it verbatim, and return `[summary_message, *kept]`. Store a `compaction` entry in `session.py` holding the summary and the id of the first kept entry; `branch()` then replays summary + kept, and the originals stay in the file. pi's versions: [`isCutPointMessage`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts#L351-L393), [`findValidCutPoints`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts#L394), [`findCutPoint`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts#L446), [`prepareCompaction`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts#L859), [`compact`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts#L952).
-5. **Wire both triggers in `agent.py`** — proactive inside `prepare_request` (past 0.7 of the window, pi's [`shouldCompact`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts#L267)), reactive around `runtime.run()`: the provider raises a typed `ContextOverflow` for "prompt is too long", the agent compacts and retries exactly once.
+5. **Wire both triggers in `agent.py`** — proactive inside `prepare_request` (past 0.7 of the window, pi's [`shouldCompact`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts#L267)), reactive around `runtime.run()`: each provider adapter raises a typed `ContextOverflow` for its own "too long" error, the agent compacts and retries exactly once.
 
 The cut-point search, which is where most compaction bugs live:
 
@@ -1387,7 +1444,7 @@ def latest_safe_cut(messages, keep_tail_tokens):
 
 Tests: `test_context.py` — estimates within 20% of a recorded `usage` on a saved request. `test_cache_policy.py` — the same messages serialize to identical bytes twice; there are never more than four breakpoints. `test_shrink.py` — no compaction ever leaves a `tool_use` without its `tool_result`; masking never touches the last K turns; compacting twice at the same cut point produces one entry (key it by the cut-point entry id).
 
-**Done when:** a long Week 2 task run shows per-segment usage in its trace, a nonzero `cache_read_input_tokens` from the second request on, and — with the window artificially set to 20,000 — one compaction entry and a run that still finishes.
+**Done when:** a long Week 2 task run shows per-segment usage in its trace, a nonzero `cache_read_tokens` from the second request on, and — with the window artificially set to 20,000 — one compaction entry and a run that still finishes.
 
 ### Wednesday — measuring what Tuesday's pipeline actually does.
 **Goal.** Proof, not plumbing: a radix toy that shows what a server could reuse, a TTL policy, a ledger that prices every miss, one interface over four ways to shrink history, and the first piece of memory.
@@ -1396,8 +1453,8 @@ Tests: `test_context.py` — estimates within 20% of a recorded `usage` on a sav
 
 1. **`rig/kvtoy.py`** — `RadixTree` with `match_prefix(ids) -> (n_matched, node)`, `insert(ids)` (splitting a node when a new key diverges partway along an edge), per-node `ref_count`, and `evict(n)` that frees least-recently-used *leaves* with `ref_count == 0` only. Tokenize with any tokenizer (`pip install tiktoken`; `o200k_base` is fine — the hit rate depends on prefix structure, not the exact ids). Replay every request from your Week 1 and 2 traces in order and report `matched / total` tokens. SGLang's real one: [`match_prefix`](https://github.com/sgl-project/sglang/blob/b068417bfcc19ba14e6588ce96d31e406077e6aa/python/sglang/srt/mem_cache/radix_cache.py#L364), [`insert`](https://github.com/sgl-project/sglang/blob/b068417bfcc19ba14e6588ce96d31e406077e6aa/python/sglang/srt/mem_cache/radix_cache.py#L428), [`evict`](https://github.com/sgl-project/sglang/blob/b068417bfcc19ba14e6588ce96d31e406077e6aa/python/sglang/srt/mem_cache/radix_cache.py#L552), [`_split_node`](https://github.com/sgl-project/sglang/blob/b068417bfcc19ba14e6588ce96d31e406077e6aa/python/sglang/srt/mem_cache/radix_cache.py#L677).
 2. **`cache_policy.py`, TTLs** — a 1-hour breakpoint after tools and system, a 5-minute one on the newest message (1-hour entries must come before 5-minute ones); `choose_ttl(expected_idle_s)` picks 1 hour only when the expected gap exceeds 5 minutes and the prefix will be reused at least twice. Record `cache_creation.ephemeral_5m_input_tokens` and `ephemeral_1h_input_tokens` per request. Add `prewarm()`: before a known idle gap (waiting on a long tool, a human), send a minimal request that rewrites the entry — and only when the ledger says it's cheaper than a miss, which is pi's [`CacheWarmer.evaluate`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/cache-warmer.ts#L378) decision.
-3. **`rig/ledger.py`** — per request, compare the previous request's cacheable prefix with this request's `cache_read_input_tokens`; the shortfall is a miss. Price it (shortfall × (write price − read price)) and assign a cause: idle past the TTL, model switch, edited prefix (find the first differing segment), or a breakpoint moved. pi's [`detectMiss`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/cache-stats.ts#L56-L147) and [`computeCacheWaste`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/cache-stats.ts#L148). Every later week reads this file's output.
-4. **The `Shrinker` interface, in `shrink.py`** — `shrink(messages) -> (messages, entry)`, implemented by `Compaction` (Tuesday), `ToolResultClearing` (yours: replace tool results older than `keep` uses until at least `clear_at_least` tokens are freed), `ProviderClearing` (sends `clear_tool_uses_20250919` per [Context editing](https://platform.claude.com/docs/en/build-with-claude/context-editing) and returns messages unchanged), and `ServerCompaction` (per [Compaction](https://platform.claude.com/docs/en/build-with-claude/compaction)). The agent picks one by name from config, so Saturday's Experiment 6 is a flag.
+3. **`rig/ledger.py`** — per request, compare the previous request's cacheable prefix with this request's `cache_read_tokens`; the shortfall is a miss. Price it (shortfall × (write price − read price)) and assign a cause: idle past the TTL, model switch, edited prefix (find the first differing segment), or a breakpoint moved. pi's [`detectMiss`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/cache-stats.ts#L56-L147) and [`computeCacheWaste`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/cache-stats.ts#L148). Every later week reads this file's output.
+4. **The `Shrinker` interface, in `shrink.py`** — `shrink(messages) -> (messages, entry)`, implemented by `Compaction` (Tuesday), `ToolResultClearing` (yours: replace tool results older than `keep` uses until at least `clear_at_least` tokens are freed), `ProviderClearing` (sends `clear_tool_uses_20250919` per [Context editing](https://platform.claude.com/docs/en/build-with-claude/context-editing) and returns messages unchanged), and `ServerCompaction` (per [Compaction](https://platform.claude.com/docs/en/build-with-claude/compaction)). The last two are Anthropic API features: on any other provider the agent falls back to `Compaction`. The agent picks one by name from config, so Saturday's Experiment 6 is a flag.
 5. **Memory** — write `workspaces/click/AGENTS.md` yourself (layout, test command, conventions — the things the agent re-discovers every run), and add `tools/note.py`: `note(text)` appends to `.rig/notes.md`, refusing once the file would pass 2 KB; `agent.py` loads it into the system prompt at session start, after `AGENTS.md`.
 
 Tests: `test_kvtoy.py` — property tests (`hypothesis`, or 1,000 random token lists): `match_prefix` always returns the longest stored prefix; `evict` never frees a node with `ref_count > 0`; inserting then matching the same list matches all of it. `test_ledger.py` — two identical requests five seconds apart show no miss; a changed tool schema shows a miss caused by an edited prefix. `test_shrink.py` — every `Shrinker` returns messages that pass the Week 2 orphan check.
@@ -1422,7 +1479,7 @@ Tests: `test_kvtoy.py` — property tests (`hypothesis`, or 1,000 random token l
 
 **Why.** Three quick runs make the rules from Monday visible: caching on vs off, one timestamp destroying a cache, and how much a summary's template matters.
 
-Run Experiments 1, 2 and 4 below. For Experiment 1, make caching a flag in `cache_policy.py` (`place()` returns messages untouched when off) and run the eval set both ways. For Experiment 2, put `datetime.now()` at the top of the system prompt, watch `cache_read_input_tokens` drop to zero in the ledger with cause "edited prefix", then move it to the newest user message and watch reads recover. For Experiment 4, swap `Compaction`'s template for "Summarize the conversation so far" on T17 and compare. Write results to `notes/week3-experiments.md`.
+Run Experiments 1, 2 and 4 below. For Experiment 1, make caching a flag in `cache_policy.py` (`place()` returns the request body untouched when off) and run the eval set both ways. For Experiment 2, put `datetime.now()` at the top of the system prompt, watch `cache_read_tokens` drop to zero in the ledger with cause "edited prefix", then move it to the newest user message and watch reads recover. For Experiment 4, swap `Compaction`'s template for "Summarize the conversation so far" on T17 and compare. Write results to `notes/week3-experiments.md`.
 
 **Done when:** the note has the cache-read ratio and dollars per task both ways, and the ledger screenshot (or excerpt) of the timestamp miss.
 
@@ -2053,14 +2110,14 @@ Reference code on this page is pinned so line numbers never drift: [nanochat](ht
 | `rig/lm/block.py` | One transformer block's forward pass with plain tensor ops | [`Block`](https://github.com/karpathy/nanochat/blob/92d63d4e8bb4df75c3b71618f31ddde2378b2bcd/nanochat/gpt.py#L144-L156), [`CausalSelfAttention.forward`](https://github.com/karpathy/nanochat/blob/92d63d4e8bb4df75c3b71618f31ddde2378b2bcd/nanochat/gpt.py#L84) | Wed |
 | `rig/lm/toolgen.py` | A copy of `Engine.generate` that calls rig's `search` | [`Engine.generate`](https://github.com/karpathy/nanochat/blob/92d63d4e8bb4df75c3b71618f31ddde2378b2bcd/nanochat/engine.py#L176) | Thu |
 | `rig/kvdemo.py` | Decode with and without a KV cache; plot tokens per second against context length | [`KVCache`](https://github.com/karpathy/nanochat/blob/92d63d4e8bb4df75c3b71618f31ddde2378b2bcd/nanochat/engine.py#L82) | Fri |
-| `providers/anthropic.py` (extend) | Record time to first token and time per output token on every call | — | Sat |
+| `providers/anthropic.py`, `providers/openai_chat.py` (extend) | Record time to first token and time per output token on every call | — | Sat |
 
 ```text
 rig/
   lm/                    # learning code: never imported by the agent
     bpe.py  block.py  toolgen.py
   kvdemo.py
-  providers/anthropic.py # + ttft_s, tpot_s on TurnEnd
+  providers/*.py         # + ttft_s, tpot_s on TurnEnd, in every adapter
 reading/nanochat/        # pinned, trained on your machine
 notes/week6-experiments.md, notes/week6-kv-arithmetic.md
 tests/test_bpe.py, test_block.py
@@ -2083,7 +2140,7 @@ while True:
     out.append(tok)
     logits = model.forward([tok], cache)         # decode: one token, reads the whole cache -> bandwidth-bound -> TPOT
 
-# rig v0.6 measures the same two phases from outside the API (providers/anthropic.py)
+# rig v0.6 measures the same two phases from outside the API (each adapter in providers/)
 t0 = monotonic(); first = None
 for ev in sdk_stream:
     if first is None and is_first_text_or_tool_delta(ev): first = monotonic()
@@ -2180,7 +2237,7 @@ Test: `test_block.py` — `torch.allclose(yours, theirs, atol=1e-5)` on three ra
 **Why.** Week 8's routing and Week 10's latency budgets both depend on rig knowing how long prefill and decode each took.
 
 1. Run Experiments 1–4 below; results to `notes/week6-experiments.md`. For Experiment 4, call [`estimate_prefill_flops`](https://github.com/karpathy/nanochat/blob/92d63d4e8bb4df75c3b71618f31ddde2378b2bcd/nanochat/gpt.py#L362) and [`estimate_decode_flops`](https://github.com/karpathy/nanochat/blob/92d63d4e8bb4df75c3b71618f31ddde2378b2bcd/nanochat/gpt.py#L351) with one rig step's real token counts.
-2. Ship rig v0.6 per **Project increment** below: in `providers/anthropic.py`, record `t0` before opening the stream, the time of the first text or tool-input delta, and the end time; put `ttft_s` and `tpot_s` on `TurnEnd` and into the `chat` span (Week 5) as attributes. Add median TTFT and TPOT per task to `report.py`.
+2. Ship rig v0.6 per **Project increment** below: in each provider adapter, record `t0` before opening the stream, the time of the first text or tool-input delta, and the end time; put `ttft_s` and `tpot_s` on `TurnEnd` and into the `chat` span (Week 5) as attributes. Add median TTFT and TPOT per task to `report.py`.
 
 **Done when:** a fresh run's trace has `ttft_s` and `tpot_s` on every model call, and the report shows them.
 
@@ -2491,7 +2548,7 @@ Reference code on this page is pinned so line numbers never drift: [pi](https://
 
 ## Concepts
 - **Cost per success, not cost per token.** A cheap model that fails twice and then succeeds costs more than an expensive one that succeeds once. Every routing decision is judged on your eval set by pass^3 and dollars per solved task, plotted together.
-- **Reasoning effort is a request parameter.** On the Anthropic API, `output_config.effort` takes `low`, `medium`, `high`, `xhigh` or `max`; the default and supported values depend on the model (see [Effort](https://platform.claude.com/docs/en/build-with-claude/effort)). On models with adaptive thinking, effort is the main control for how often and how deeply the model thinks; older extended-thinking models use a `budget_tokens` cap instead. On the OpenAI API, `reasoning.effort` ranges from `none` to `max` (model-dependent, default `medium`), and reasoning tokens are billed as output and reported in `output_tokens_details.reasoning_tokens` (see the [reasoning guide](https://developers.openai.com/api/docs/guides/reasoning)).
+- **Reasoning effort is a request parameter.** On the Anthropic API, `output_config.effort` takes `low`, `medium`, `high`, `xhigh` or `max`; the default and supported values depend on the model (see [Effort](https://platform.claude.com/docs/en/build-with-claude/effort)). On models with adaptive thinking, effort is the main control for how often and how deeply the model thinks; older extended-thinking models use a `budget_tokens` cap instead. On the OpenAI API, `reasoning.effort` ranges from `none` to `max` (model-dependent, default `medium`), and reasoning tokens are billed as output and reported in `output_tokens_details.reasoning_tokens` (see the [reasoning guide](https://developers.openai.com/api/docs/guides/reasoning)). Those are the Responses API's names; Chat Completions, which rig's `openai_chat.py` and OpenRouter use, spells them `reasoning_effort` and `completion_tokens_details.reasoning_tokens`.
 - **Effort changes more than thinking.** It affects every output token: explanations, tool-call arguments and how many tool calls the model makes. Lower effort usually means fewer, terser tool calls, which can help a well-scoped step and hurt an exploratory one.
 - **Routing strategies, cheapest first.** Static rules per call site (compaction and file summaries go to the small model). A heuristic scorer over request features (length, code, reasoning markers), which is LiteLLM's complexity router. A learned router that predicts whether the strong model is needed and applies a calibrated threshold, which is RouteLLM. A cascade that tries the cheap option, checks the result, and escalates. A bandit that learns online from outcomes, which is LiteLLM's adaptive router.
 - **Agents route per step.** Planning, a hard debugging step or a final synthesis needs strength; reading, searching, summarizing and classifying usually don't. Escalation signals come from the trajectory: the same tool call failing repeatedly, tests still failing after an edit, a verifier rejecting an answer.
@@ -2502,7 +2559,7 @@ Reference code on this page is pinned so line numbers never drift: [pi](https://
 ## This week's objective and target layout
 **Objective.** By Sunday, every model call rig makes goes through one gateway that picks model and effort by role, logs why, keeps that choice stable enough to protect the prompt cache, escalates on stalls with a cap, and backs off when the budget runs low — and the weekly report shows, on your Week 5 evals, one routed configuration within the noise of "always the big model" at a clearly lower cost per success, or says honestly that none was.
 
-**What changes.** The gateway *is* a `Provider` (Week 2): it implements `stream(request)` and dispatches to the real providers underneath, so `runtime.py` doesn't change at all. What does change is that every call site now says which role it's playing:
+**What changes.** The gateway *is* a `Provider` (Week 2): it implements `stream(context)` and dispatches to the real providers underneath, so `runtime.py` doesn't change at all. What does change is that every call site now says which role it's playing:
 
 | File | Its one job | Reference counterpart | Day |
 |---|---|---|---|
@@ -2523,24 +2580,25 @@ notes/week8-experiments.md   # + the cost-vs-quality scatter
 tests/test_effort.py, test_routers.py, test_session_pin.py, test_budget_guard.py
 ```
 
-**How it fits together.** Every model call already flows through `provider.stream(request)`; now the provider is the gateway:
+**How it fits together.** Every model call already flows through `provider.stream(context)`; now the provider is the gateway. `Context` gains three fields this week, `role`, `session_id` and `effort` (a `ThinkingLevel`), and each adapter maps `effort` to its own API's parameter:
 
 ```python
 # gateway/__init__.py — a Provider (Week 2), so runtime.py is untouched
 class Gateway:
-    def stream(self, request):
-        role = request.pop("role")                                # declared by the call site
-        session = self.sessions.get(request["session_id"])
-        route = self.router.route(features(request, role, session), session)   # Wed
+    def stream(self, context):
+        role = context.role                                       # declared by the call site
+        session = self.sessions.get(context.session_id)
+        route = self.router.route(features(context, role, session), session)   # Wed
         route = self.budget_guard.adjust(route, session)          # Thu: effort down before model down
-        params = effort.apply(self.models[route.model], route.effort, request)  # Tue: clamped, mapped
+        level = effort.clamp(self.models[route.model], route.effort)            # Tue: clamped per model
+        provider = get_provider(route.provider, route.model)      # Week 2's factory: Anthropic, OpenAI, OpenRouter
         span.set_attributes(role=role, model=route.model, effort=route.effort,
                             router=self.router.name, score=route.score, reason=route.reason)
-        for event in self.providers[route.provider].stream(params):
+        for event in provider.stream(context.model_copy(update={"effort": level})):
             yield event
             if isinstance(event, TurnEnd):
-                ledger.record(request, event.usage, route)        # reasoning tokens as their own line
-        session.observe_turn(request, event)                      # stall signals for the next route
+                ledger.record(context, event.usage, route)        # reasoning tokens as their own line
+        session.observe_turn(context, event)                      # stall signals for the next route
 
 # call sites declare their role
 #   agent turns        -> "plan" (first turn), "explore" (previous batch was all read-only), else "act"
@@ -2578,8 +2636,8 @@ class Gateway:
 
 1. **`rig/gateway/policy.yaml`** — `version`, the role list (`plan`, `act`, `explore`, `summarize`, `judge`, `classify`), each role's default `{model, effort}`, the cascade `ladder`, `max_escalations`, `low_budget_usd`, and an approved-fallbacks list per role. The policy file's hash goes on every span (Week 5's `prompts.py` can load it).
 2. **`rig/gateway/__init__.py`** — `Gateway` as in **How it fits together**, with a static router to start (role → policy default). Change every call site to pass `role`: the agent's turns, Week 3's compaction, Week 4's rerank and rewrite, Week 5's judge. Swap the provider rig constructs for a `Gateway` wrapping it.
-3. **`rig/gateway/effort.py`** — `class ThinkingLevel(Enum): OFF, LOW, MEDIUM, HIGH, MAX`; per-model capability data (supported levels, whether it takes `effort` or only `budget_tokens`); `clamp(model, level)` returning the nearest supported level at or below the request; `apply(model, level, request)` writing Anthropic's `output_config.effort` (plus thinking settings) or OpenAI's `reasoning.effort`. For `budget_tokens`-only models, leave room for the answer: `budget = min(level_budget, max_tokens - answer_room)`. pi's versions: [`getSupportedThinkingLevels`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/models.ts#L1261), [`clampThinkingLevel`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/models.ts#L1272), [`thinkingBudgetForLevel`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/simple-options.ts#L82), [`clampThinkingBudgetToAnswerRoom`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/simple-options.ts#L89), and the Anthropic mapping in [`mapThinkingLevelToEffort`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/anthropic-messages.ts#L954).
-4. **Reasoning tokens** — read them from the response (`output_tokens_details.reasoning_tokens` on OpenAI; thinking blocks on Anthropic) and record them as their own field in the trace and in Week 3's ledger, priced as output.
+3. **`rig/gateway/effort.py`** — `class ThinkingLevel(Enum): OFF, LOW, MEDIUM, HIGH, MAX`; per-model capability data (supported levels, whether it takes `effort` or only `budget_tokens`); `clamp(model, level)` returning the nearest supported level at or below the request; the clamped level goes on `Context.effort`, and each Week 2 adapter maps it to its own parameter: `anthropic.py` to `output_config.effort` (plus thinking settings), `openai_chat.py` to `reasoning_effort`. For `budget_tokens`-only models, leave room for the answer: `budget = min(level_budget, max_tokens - answer_room)`. pi's versions: [`getSupportedThinkingLevels`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/models.ts#L1261), [`clampThinkingLevel`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/models.ts#L1272), [`thinkingBudgetForLevel`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/simple-options.ts#L82), [`clampThinkingBudgetToAnswerRoom`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/simple-options.ts#L89), and the Anthropic mapping in [`mapThinkingLevelToEffort`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/anthropic-messages.ts#L954).
+4. **Reasoning tokens** — read them from the response (`completion_tokens_details.reasoning_tokens` on Chat Completions, `output_tokens_details.reasoning_tokens` on OpenAI's Responses API; thinking blocks on Anthropic), in each adapter, as a `reasoning_tokens` field on `Usage`, and record them as their own field in the trace and in Week 3's ledger, priced as output.
 
 Tests: `test_effort.py` — `clamp` never returns a level a model doesn't list; a `budget_tokens` model's budget always leaves at least `answer_room` under `max_tokens`; `apply` produces exactly the parameter names each provider documents.
 
@@ -4335,7 +4393,7 @@ tests/test_ledger.py, test_resume.py, test_edit_file_v3.py, test_approvals.py, t
 for seq in count():
     end = ledger.get_step(run_id, seq, "model")                 # replay: a recorded response
     if end is None:
-        for event in provider.stream(request):
+        for event in provider.stream(context):
             yield event
             if isinstance(event, TurnEnd): end = event
         end = ledger.put_step(run_id, seq, "model", end)        # durable BEFORE any tool runs
