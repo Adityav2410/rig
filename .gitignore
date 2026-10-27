@@ -13,3 +13,15 @@ workspaces/
 traces/
 runs/
 evals/results.jsonl
+# Tool caches
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# OS / editor
+.DS_Store
+
+# Local notes and logs
+next-steps.md
+logs.txt
+*.log
