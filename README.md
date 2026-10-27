@@ -6,18 +6,28 @@
 
 > **About this project.** In Q4 2026 I (Aditya) set out to learn how agents really work by building them: first a coding agent, then general-purpose tools in the spirit of Perplexity and Muse. To guide that, I wrote a study plan with Claude's help, [*Agents from First Principles*](https://ai.labs-nature.com/study-plan/). This repository is my implementation of that plan, built week by week as part of the learning process, so it follows the plan roughly rather than exactly.
 
-**rig** is a coding agent built from scratch, one primitive at a time, on the raw Anthropic Messages API: no agent framework, no hidden loop. Every piece (the request loop, the tools, the sandbox, the budget, the trace, the eval harness) is small enough to read in one sitting.
+**rig** is a provider-agnostic coding agent built from scratch, one primitive at a time, directly on model APIs: no agent framework, no hidden loop. Every piece (the request loop, the tools, the sandbox, the budget, the trace, the eval harness) is small enough to read in one sitting.
 
 Each week of the 18-week plan is preserved as a branch (`week1`, `week2`, ...), so you can see exactly what the code looked like at each stage.
 
 > **Status:** early and evolving. `main` tracks the latest week; APIs change from week to week by design.
+
+## Model providers
+
+rig is meant to work with any capable model, not one vendor. From Week 2 it talks to models through one small `Provider` interface, so the agent loop never depends on a vendor's wire format.
+
+| Provider | API | Status |
+|---|---|---|
+| Anthropic | Messages API | Supported |
+| OpenAI | Chat Completions | Planned (Week 2) |
+| OpenRouter and other OpenAI-compatible endpoints (vLLM, Ollama, ...) | Chat Completions | Planned (Week 2) |
 
 ## What's in it
 
 | Piece | Where | What it does |
 |---|---|---|
 | Agent loop | `rig/agent.py` | Sends the conversation, runs the tools the model asks for, appends the results, and repeats until the model stops |
-| API client | `rig/llm.py` | One function, `call(request)`, with retries and backoff; the only network code |
+| Model client | `rig/llm.py` | One function, `call(request)`, with retries and backoff; the only network code (becomes `rig/providers/` in Week 2) |
 | Tools | `rig/tools/` | `list_files`, `read_file`, `edit_file`, `search`, and `bash`, each registered with a JSON schema |
 | Sandbox | `rig/workspace.py`, `rig/docker/` | Runs tool commands inside a throwaway Docker container; the API key never enters it |
 | Budget | `rig/budget.py` | Hard caps on steps, tokens, dollars, and wall-clock time |
@@ -26,7 +36,7 @@ Each week of the 18-week plan is preserved as a branch (`week1`, `week2`, ...), 
 
 ## Quickstart
 
-Requirements: Python 3.14, [uv](https://docs.astral.sh/uv/), Docker, and an [Anthropic API key](https://platform.claude.com/).
+Requirements: Python 3.14, [uv](https://docs.astral.sh/uv/), Docker, and an API key for a supported provider (today: an [Anthropic API key](https://platform.claude.com/)).
 
 ```bash
 git clone https://github.com/Adityav2410/rig.git
