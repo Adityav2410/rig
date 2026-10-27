@@ -4,9 +4,11 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.14](https://img.shields.io/badge/python-3.14-blue.svg)](https://www.python.org/)
 
+> **About this project.** In Q4 2026 I (Aditya) set out to learn how agents really work by building them: first a coding agent, then general-purpose tools in the spirit of Perplexity and Muse. To guide that, I wrote a study plan with Claude's help, [*Agents from First Principles*](https://ai.labs-nature.com/study-plan/). This repository is my implementation of that plan, built week by week as part of the learning process, so it follows the plan roughly rather than exactly.
+
 **rig** is a coding agent built from scratch, one primitive at a time, on the raw Anthropic Messages API: no agent framework, no hidden loop. Every piece (the request loop, the tools, the sandbox, the budget, the trace, the eval harness) is small enough to read in one sitting.
 
-It is the project built in [*Agents from First Principles*](https://ai.labs-nature.com/study-plan/), an 18-week self-study program. Each week of the course is preserved as a branch (`week1`, `week2`, ...), so you can see exactly what the code looked like at each stage.
+Each week of the 18-week plan is preserved as a branch (`week1`, `week2`, ...), so you can see exactly what the code looked like at each stage.
 
 > **Status:** early and evolving. `main` tracks the latest week; APIs change from week to week by design.
 
