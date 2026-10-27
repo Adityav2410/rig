@@ -1,0 +1,13 @@
+diff --git a/src/click/types.py b/src/click/types.py
+index 0eb8462..e74e33a 100644
+--- a/src/click/types.py
++++ b/src/click/types.py
+@@ -661,7 +661,7 @@ class _NumberRangeBase(
+         min = self.min
+         max = self.max
+         lt_min: bool = min is not None and (
+-            operator.le if self.min_open else operator.lt
++            operator.lt if self.min_open else operator.le
+         )(rv, min)
+         gt_max: bool = max is not None and (
+             operator.ge if self.max_open else operator.gt

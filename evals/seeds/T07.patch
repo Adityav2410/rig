@@ -1,0 +1,13 @@
+diff --git a/src/click/core.py b/src/click/core.py
+index de129ec..6d2be40 100644
+--- a/src/click/core.py
++++ b/src/click/core.py
+@@ -486,7 +486,7 @@ class Context:
+             auto_envvar_prefix = auto_envvar_prefix.upper()
+ 
+         if auto_envvar_prefix is not None:
+-            auto_envvar_prefix = auto_envvar_prefix.replace("-", "_")
++            auto_envvar_prefix = auto_envvar_prefix
+ 
+         self.auto_envvar_prefix = auto_envvar_prefix
+ 

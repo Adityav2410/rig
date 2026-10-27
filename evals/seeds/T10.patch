@@ -1,0 +1,13 @@
+diff --git a/src/click/formatting.py b/src/click/formatting.py
+index c4aa2de..590c47f 100644
+--- a/src/click/formatting.py
++++ b/src/click/formatting.py
+@@ -16,7 +16,7 @@ def measure_table(rows: cabc.Iterable[tuple[str, str]]) -> tuple[int, ...]:
+ 
+     for row in rows:
+         for idx, col in enumerate(row):
+-            widths[idx] = max(widths.get(idx, 0), term_len(col))
++            widths[idx] = max(widths.get(idx, 0), len(col))
+ 
+     return tuple(y for x, y in sorted(widths.items()))
+ 

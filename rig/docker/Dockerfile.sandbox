@@ -1,0 +1,9 @@
+# docker/Dockerfile.sandbox
+FROM python:3.13-slim
+RUN apt-get update && apt-get install -y --no-install-recommends git ripgrep less \
+    && rm -rf /var/lib/apt/lists/*
+RUN python -m venv /opt/venv \
+    && /opt/venv/bin/pip install --no-cache-dir "pytest>=8" "flit_core>=3.11,<4" \
+    && chmod -R a+rwX /opt/venv
+ENV PATH=/opt/venv/bin:$PATH PYTHONDONTWRITEBYTECODE=1 PIP_NO_INDEX=1 PIP_NO_CACHE_DIR=1
+WORKDIR /repo

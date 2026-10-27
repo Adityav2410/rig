@@ -1,0 +1,1 @@
+../rig-study/templates/AGENTS.md

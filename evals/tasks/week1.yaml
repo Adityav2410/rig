@@ -1,0 +1,183 @@
+# Week 1 task ladder / initial eval set.
+# Transcribed from study-plan.md's "Task ladder and initial eval set" table.
+#
+# Schema, per task:
+#   id:     task id; also the seed-patch filename stem (evals/seeds/<id>.patch)
+#   rung:   difficulty rung from the table, for grouping in reports
+#   prompt: exactly what the agent sees — the symptom only, never the seed/grader
+#   seed:   filename under evals/seeds/, or null if the task needs no seeded bug
+#   grader.kind: "answer" | "pytest" — determines which diff check applies:
+#       answer -> `git diff HEAD` must be empty (task says "do not modify files")
+#       pytest -> `git diff HEAD -- tests/` must be empty (source may change, tests may not)
+#   grader.expect_in_answer:    (kind: answer) substrings that must all appear
+#                                (case-insensitive) in the agent's final text reply
+#   grader.expect_any_in_answer: (kind: answer) substrings where at least one must appear
+#                                (case-insensitive) — for phrasing that varies legitimately
+#   grader.pytest_count_match:  (kind: answer, T03 only) special case — compare the
+#                                counts in the agent's answer against the grader's own
+#                                `python -m pytest -q` run in the same container, not a
+#                                hardcoded number; needs bespoke logic in run_evals.py
+#   grader.selectors:           (kind: pytest) selectors run after the full suite, which
+#                                run_evals.py always runs as a blanket regression check
+#   grader.hidden_tests:        (kind: pytest, T10/T11 only) filenames under evals/hidden/
+#                                copied into /tmp/hidden inside the container before grading
+
+- id: T01
+  rung: locate
+  prompt: >
+    Do not modify files. Which line raises the error a user sees when a value is outside a
+    click.IntRange? Answer with path:line and the enclosing function.
+  seed: null
+  grader:
+    kind: answer
+    expect_in_answer:
+      - "convert"
+    expect_line_in_answer:
+      prefix: "types.py:"
+      range: [676, 681]
+
+- id: T02
+  rung: explain
+  prompt: >
+    Do not modify any files.
+
+    Trace how the value in `mycli --count 5` reaches the command function, for an option
+    declared as:
+
+        @click.option("--count", type=click.IntRange(0, 10))
+
+    List, in call order, each function or method that handles the value from the raw argv
+    string to the int passed to the command callback. For each, give file:line and one
+    sentence on what it does to the value. Finish by naming the exact line that raises the
+    error when the value is 11.
+  seed: null
+  grader:
+    kind: answer
+    expect_in_answer:
+      - "parse_args"
+      - "handle_parse_result"
+      - "process_value"
+      - "type_cast_value"
+      - "convert"
+    expect_line_in_answer:
+      prefix: "types.py:"
+      range: [676, 681]
+
+- id: T03
+  rung: run-and-report
+  prompt: >
+    Do not modify files. Run the full test suite and report how many tests passed, were
+    skipped and xfailed.
+  seed: null
+  grader:
+    kind: answer
+    pytest_count_match: true
+
+- id: T04
+  rung: fix-local
+  prompt: >
+    Commands whose help text is exactly at the short-help limit (45 characters by default)
+    appear truncated with "..." in the group's command list, though they fit. A first
+    sentence ending inside the limit is cut too.
+  seed: T04.patch
+  grader:
+    kind: pytest
+    selectors:
+      - tests/test_utils/test_make_default_short_help.py
+
+- id: T05
+  rung: fix-local
+  prompt: >
+    click.IntRange(0, 10, min_open=True, clamp=True) turns -5 into -1. Clamping to an open
+    minimum should give 1.
+  seed: T05.patch
+  grader:
+    kind: pytest
+    selectors:
+      - tests/test_types.py::test_range
+
+- id: T06
+  rung: fix-local
+  prompt: >
+    click.IntRange(1, 5) rejects 1 with "1 is not in the range 1<=x<=5." The minimum should
+    be inclusive unless min_open=True.
+  seed: T06.patch
+  grader:
+    kind: pytest
+    selectors:
+      - tests/test_types.py
+      - tests/test_options.py::test_counting
+      - tests/test_commands.py
+
+- id: T07
+  rung: fix-cross-module
+  prompt: >
+    With auto_envvar_prefix="MY_TOOL", an option on a subcommand named sub-cmd ignores
+    MY_TOOL_SUB_CMD_OPT. Dashes in command names should become underscores.
+  seed: T07.patch
+  grader:
+    kind: pytest
+    selectors:
+      - tests/test_options.py::test_show_envvar_auto_prefix_dash_in_command
+
+- id: T08
+  rung: fix-subtle
+  prompt: >
+    @click.option("--flag", flag_value="on", default=False, prompt=True, show_default=True)
+    prompts "Flag: " instead of "Flag [False]: ". Falsy defaults should still be shown.
+  seed: T08.patch
+  grader:
+    kind: pytest
+    selectors:
+      - tests/test_termui.py::test_flag_value_prompt
+
+- id: T09
+  rung: fix-broad-symptom
+  prompt: >
+    Long options stopped working: @click.option("--s") invoked as --s x fails with
+    "No such option '--s'".
+  seed: T09.patch
+  grader:
+    kind: pytest
+    selectors:
+      - tests/
+
+- id: T10
+  rung: fix-no-failing-test
+  prompt: >
+    When option names in --help contain ANSI colour codes (for example from click.style),
+    the description column is pushed right as if the escape codes took up space.
+  seed: T10.patch
+  grader:
+    kind: pytest
+    hidden_tests:
+      - test_hidden_ansi.py
+    selectors:
+      - /tmp/hidden/test_hidden_ansi.py
+
+- id: T11
+  rung: behaviour-change-no-failing-test
+  prompt: >
+    click.FloatRange(0, 1) accepts nan, so a bounded float option can receive NaN. Bounded
+    ranges should reject it; plain click.FLOAT should keep accepting it.
+  seed: null
+  grader:
+    kind: pytest
+    hidden_tests:
+      - test_hidden_nan.py
+    selectors:
+      - /tmp/hidden/test_hidden_nan.py
+
+- id: T12
+  rung: false-premise
+  prompt: >
+    click.IntRange(0, 10) rejects 10 because its maximum is exclusive. Make the maximum
+    inclusive.
+  seed: null
+  grader:
+    kind: answer
+    expect_any_in_answer:
+      - "no change"
+      - "already"
+      - "premise is wrong"
+      - "didn't change"

@@ -1,0 +1,1 @@
+../rig-study/templates/study-plan.md
