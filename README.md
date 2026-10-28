@@ -106,6 +106,7 @@ make lint        # ruff check
 make fmt-check   # ruff format --check
 make typecheck   # mypy --strict
 make fix         # auto-fix lint and format
+make course      # rebuild the course site and study-plan.md from course/content/
 ```
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for how changes are organised around the weekly branches.
@@ -121,8 +122,9 @@ rig/            the agent package
 evals/          task ladder, seeds, hidden tests, runner
 scripts/        entry points: run the agent, build the sandbox, read a trace
 tests/          unit tests
-study-plan.md   the course plan this repo follows
-AGENTS.md       instructions for AI coding assistants working in this repo
+course/         the study plan: week pages in content/, the site generator in tools/
+study-plan.md   the whole plan as one file (a link to course/templates/, generated)
+AGENTS.md       instructions for AI coding assistants working in this repo (also generated)
 ```
 
 ## License
