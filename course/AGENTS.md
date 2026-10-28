@@ -33,6 +33,10 @@ into an unrelated project.
   touch `content/*.md` — see the dialect note above; a generic formatter would
   corrupt the custom markdown syntax.
 
+**Week pages have a fixed format** — objective and target layout with "how it fits together"
+pseudocode first, then prescriptive day-by-day steps with pinned code references inline. Follow
+`GUIDELINES.md` §10 for every edit to `content/w*.md`, and use `content/w2.md` as the model.
+
 Checklist `data-id`s (e.g. `w1.check.3`) are assigned by position within a task list and
 are what a reader's ticked-checkbox progress is keyed on. Don't reorder or delete existing
 task lines in a week file — append new ones at the end instead — or a reader's saved

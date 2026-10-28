@@ -191,3 +191,55 @@ audit. Keep that habit: when asked to do a scoped task, it's worth a brief,
 bounded look for adjacent rot — but keep it bounded, and say plainly what
 you checked and what you didn't, rather than implying an exhaustive audit
 happened when it didn't.
+
+## 10. Every week page follows one format: objective first, then prescriptive days
+
+Readers kept saying the same thing: the material was all there, but spread across sections, so
+building anything meant scrolling between the day plan, the build list and the reading list. The
+fix is one fixed shape per week, top-down, with the references pulled into the step that needs
+them. `content/w2.md` is the canonical example; match it.
+
+Order of sections in `wN.md`:
+
+1. **Intro paragraph** — what gets built this week and why it matters, in two or three sentences.
+2. **Pinning note** — every reference repo the week links to, pinned to one commit, with the
+   `git checkout <sha>` to match it locally.
+3. **Concepts** — short bullets; each one ends with a link to a real doc or a pinned line that
+   shows the idea in code.
+4. **This week's objective and target layout** (`{#wN-repository-layout}`):
+   - **Objective** — what works by Sunday, stated as observable behavior.
+   - **What changes** — a table: file, layer or role, its one job, the reference counterpart
+     (pinned link), the day it's built.
+   - The folder tree as it should look on Sunday.
+   - **How it fits together** — 15 to 30 lines of pseudocode showing how the new files call each
+     other end to end. This is the single most useful block on the page; never skip it.
+   - **Why this achieves the objective**, plus the one invariant to keep (for example "keep
+     `Agent`'s signature so `run_evals.py` never changes").
+5. **Day by day** (`{#wN-day-by-day}`) — the summary table, then one `###` per day, each with:
+   **Goal.** (one or two sentences) · **Why.** (one or two sentences) · numbered steps, each
+   naming the exact file, what goes in it, and the pinned reference line inline ·
+   short code or pseudocode where the shape isn't obvious from prose · the tests to write ·
+   **Done when:** an observable, checkable result. Reading days say exactly which lines to read,
+   in order, and what to look for in each.
+6. Then the existing reference sections, unchanged in order: **Build** checklist, project
+   increment, the consolidated reading map, **You should be able to answer**, **Experiments**,
+   production lens, not yet, **Checkpoint**.
+
+Rules that apply throughout:
+
+- **Pin every code link to a commit** (`/blob/<sha>/path#L10-L42`), and check the lines against a
+  checkout of that commit before shipping. Branch links drift; pinned links never do.
+- **Be prescriptive and say why.** Name the file, the function, the data structure; when there's a
+  real choice, make it and give the reason in one clause ("take tool arguments from the final
+  message — parsing partial JSON buys nothing here").
+- **Steps state what each file is *for*,** not only where its reference lives (§7).
+- **No same-page `#id` links** (§3) — refer to other sections by **bold name**.
+- **The markdown engine's limits** (§1): list items are single lines; code fences start at column
+  0, never nested inside a list item; a step that needs a code block is a bold-lead paragraph.
+- **Never touch the checklists** (§2): Build, questions, experiments and checkpoint lines stay
+  byte-identical; heading ids stay stable.
+- **Don't teach later weeks early.** A day may point forward ("Week 9 revisits this"), never build it.
+
+Verify every rewritten week mechanically: checklists identical to the committed version, every
+old heading id still present, a clean render through `tools/mdx.py` (no leaked fences, no
+same-page links), no unpinned GitHub links, every external link returning 200.
