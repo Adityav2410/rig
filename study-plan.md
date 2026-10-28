@@ -922,9 +922,10 @@ Every pi link on this page is pinned to commit `136b87e` (2026-10-23), so line n
 - **Steering versus follow-up.** A message typed mid-run can be injected after the current tool batch (steering) or held until the agent would otherwise stop (follow-up).
 - **Edit robustness.** Line endings, trailing whitespace, tabs versus spaces, and the trade-off between exact matching (safe, brittle) and fuzzy matching (forgiving, can edit the wrong place).
 - **Sessions as append-only logs.** A JSONL of entries with `id` and `parentId` gives resume, branching and "undo" without ever rewriting history. Your own Claude Code session files under `~/.claude/projects/` are a live example of the pattern.
+- **Commands, frontends and layered config.** Everything a user can ask the harness to do (run, resume, fork, change a setting) is a named command in one registry, and a frontend only turns input into a command name and arguments. Today the frontend is argv (`rig config set model ...`); a later one is an interactive shell (`/config set model ...`), the way Claude Code serves the same actions as CLI flags and as [`/` commands](https://code.claude.com/docs/en/slash-commands). Settings come from layered files, lowest first: built-in defaults, a user file, a project file, environment variables, then command-line flags. Claude Code ([settings](https://code.claude.com/docs/en/settings)) and pi ([`settings-manager.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/settings-manager.ts#L142-L147)) both work this way, so a project can pin a model while you keep your own defaults.
 
 ## This week's objective and target layout
-**Objective.** By Sunday, rig v0.2 is a CLI that streams the model's output as it arrives, survives Ctrl-C at any moment with a transcript the API still accepts, takes steering messages mid-run, resumes or forks any past session, and edits files without silently guessing, runs on Anthropic, OpenAI or OpenRouter by changing one flag — and scores no worse than v0.1 on T01–T12.
+**Objective.** By Sunday, rig v0.2 is a CLI that streams the model's output as it arrives, survives Ctrl-C at any moment with a transcript the API still accepts, takes steering messages mid-run, resumes or forks any past session, edits files without silently guessing, runs on Anthropic, OpenAI or OpenRouter by changing one flag, and remembers settings across sessions through `rig config` — and scores no worse than v0.1 on T01–T12.
 
 **What changes.** Week 1's `loop.py` does three jobs at once: it talks to the API, runs the loop, and handles every side effect (trace, budget, tools). This week you pull those apart into three layers, mirroring pi file for file: The loop module becomes a stateful class this week, so **rename `loop.py` to `agent.py`** and wrap its state in an `Agent` class (pi's `agent.ts` is the model); keep `run_agent(task, ws=..., model=..., budget=..., trace=...)` as a three-line function that builds an `Agent` and returns its `run()` result. If you already built Week 1's loop as an `Agent` class in `agent.py`, there's nothing to rename. The provider layer is also where rig stops being Anthropic-shaped: Week 1 builds Anthropic's JSON and reads it back directly; from this week the runtime speaks rig's own message types, and only the files in `providers/` know any wire format.
 
@@ -937,7 +938,9 @@ Every pi link on this page is pinned to commit `136b87e` (2026-10-23), so line n
 | `runtime.py` | runtime | The loop as a generator of events; hooks; parallel tools; abort; steering | [`agent-loop.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L172) | Tue–Wed |
 | `agent.py` (shrinks) | runtime wrapper | Owns `messages`, the queues and the hooks; iterates `runtime.run()`; writes trace | [`agent.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent.ts#L194) | Tue–Wed |
 | `session.py` | harness | Append-only JSONL log; resume and fork | [`session-manager.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/session-manager.ts#L1204) | Wed |
-| `cli.py` | harness | `rig run`, `rig resume`, `rig fork`; Ctrl-C; reads steer input | [`agent-session.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/agent-session.ts#L1873) | Wed |
+| `commands.py` | harness | One registry of named commands (`run`, `resume`, `fork`, `config ...`) and `dispatch(words, ctx)`; every frontend goes through it | pi's [`BUILTIN_SLASH_COMMANDS`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/slash-commands.ts#L19-L43) | Wed |
+| `config.py` | harness | Layered `config.yaml` loading; `get`, `set`, `unset` and `origin` per scope | pi's [`SettingsManager`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/settings-manager.ts#L272) | Wed |
+| `cli.py` | harness | The argv frontend: argv to `dispatch`; Ctrl-C; reads steer input | [`agent-session.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/agent-session.ts#L1873) | Wed |
 | `tools/fs.py` (extend) | harness | `edit_file` v2 | [`edit-diff.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/tools/edit-diff.ts#L300) | Wed |
 
 ```text
@@ -952,27 +955,35 @@ rig/
   runtime.py
   agent.py          # Week 1's loop.py, renamed: a thin stateful wrapper around runtime.run()
   session.py
-  cli.py            # scripts/run_agent.py becomes its `run` subcommand
+  commands.py       # the command registry: argv today, an interactive shell later (Week 12)
+  config.py         # defaults < ~/.config/rig/config.yaml < .rig/config.yaml < RIG_* env < flags
+  cli.py            # argv frontend; scripts/run_agent.py becomes its `run` command
   tools/fs.py       # edit_file v2
   llm.py            # Week 1's raw client: kept for reference, no longer on the live path
 evals/tasks/week1.yaml   # T13–T16 appended here: one growing regression suite
 evals/hidden/            # their hidden tests
 notes/week2-experiments.md
-tests/test_runtime.py, test_providers.py, test_abort.py, test_edit_file_v2.py, test_session.py
+tests/test_runtime.py, test_providers.py, test_abort.py, test_edit_file_v2.py, test_session.py, test_config.py
 ```
 
 **How it fits together.** One user prompt, end to end. Each layer only calls the one below it, and only through the names shown:
 
 ```python
-# cli.py — harness: owns the process, the terminal, and the session file
-def main(args):
+# cli.py — harness: the argv frontend; owns the process and the terminal
+def main(argv):
+    cfg = config.load(cwd=Path.cwd(), flags=parse_flags(argv))  # Wed: defaults < user < project < env < flags
+    return commands.dispatch(argv, Ctx(cfg=cfg, out=sys.stdout))  # a later `rig shell` calls the same dispatch
+
+# commands.py — harness: every user action is one registered command
+@command("run")                           # also "resume", "fork", "config get|set|unset|list"
+def run(ctx, args):
     session = SessionLog.open(args.session) if args.resume else SessionLog.new()       # Wed
-    agent = Agent(ws, task, model=..., budget=..., trace=...,                         # run_agent's arguments
-                  provider=get_provider(args.provider, model), session=session)        # new kwargs, with defaults
+    agent = Agent(ws, args.task, model=ctx.cfg.model, budget=..., trace=...,          # run_agent's arguments
+                  provider=get_provider(ctx.cfg.provider, ctx.cfg.model), session=session)  # new kwargs
     signal.signal(signal.SIGINT, lambda *_: agent.abort() if not agent.aborting else sys.exit(130))
     start_stdin_reader(on_steer=agent.steer, on_follow_up=agent.follow_up)            # Wed, background thread
     for event in agent.events():
-        render(event)                     # MessageDelta: print as it arrives; ToolStart/ToolEnd: one line each
+        render(event, ctx.out)            # MessageDelta: print as it arrives; ToolStart/ToolEnd: one line each
 
 # agent.py — stateful wrapper (pi's agent.ts): owns messages, queues, hooks; does every side effect
 class Agent:
@@ -992,14 +1003,14 @@ class Agent:
 # providers/*.py — the only files that import a vendor SDK or know a wire format (pi's packages/ai)
 ```
 
-**Why this achieves the objective.** Once the layers are separate, every feature this week is a local change: streaming and a second API touch only the providers; cancellation and steering touch only the runtime; sessions and `AGENTS.md` touch only the harness. The `FakeProvider` makes the runtime testable offline, so you can prove ordering and abort behavior without spending a cent. One rule keeps Week 1's harness working throughout: **keep the entry point `evals/run_evals.py` calls — `run_agent(...)`, or `Agent(...).run()` — exactly as it is**, so the harness never needs to change. The one exception is additive: a `provider=` keyword that defaults to `"anthropic"`, which `run_evals.py` fills from a new `--provider` flag.
+**Why this achieves the objective.** Once the layers are separate, every feature this week is a local change: streaming and a second API touch only the providers; cancellation and steering touch only the runtime; sessions, `AGENTS.md`, commands and config touch only the harness — and because commands never assume argv, a second frontend later (an interactive shell) is one new file over the same registry. The `FakeProvider` makes the runtime testable offline, so you can prove ordering and abort behavior without spending a cent. One rule keeps Week 1's harness working throughout: **keep the entry point `evals/run_evals.py` calls — `run_agent(...)`, or `Agent(...).run()` — exactly as it is**, so the harness never needs to change. The one exception is additive: a `provider=` keyword that defaults to `"anthropic"`, which `run_evals.py` fills from a new `--provider` flag.
 
 ## Day by day
 | Day | Time | Do | Working by end of day |
 |---|---|---|---|
 | Mon | 1.5 h | Trace pi's three layers through six files, at the line numbers given below | A half-page note mapping each rig file in the table above to its pi counterpart |
 | Tue | 2.5 to 3 h | rig's message types, the Anthropic and fake providers, `runtime.py`, parallel read-only tools; shrink `agent.py` | A fake provider streams events through `runtime.py`; read-only tools run in parallel with ordered results |
-| Wed | 2.5 to 3 h | Ctrl-C, steering, `edit_file` v2, `session.py`, `cli.py` | Ctrl-C mid-run leaves a session that resumes; `edit_file` v2 reports the closest candidate on a failed match |
+| Wed | 3 to 3.5 h | Ctrl-C, steering, `edit_file` v2, `session.py`, `commands.py`, `config.py`, `cli.py` | Ctrl-C mid-run leaves a session that resumes; `edit_file` v2 reports the closest candidate on a failed match; `rig config set` persists across runs |
 | Thu | 2.5 to 3 h | `openai_chat.py` (OpenAI and OpenRouter); `AGENTS.md` loading; read pi's harness side and Aider against your own code | T04 passes on all three providers by flag; `AGENTS.md` loads into the system prompt; you can narrate pi's prompt-to-tool-result path from memory |
 | Fri | 1 to 1.5 h | Experiments 1 to 3 | `notes/week2-experiments.md`: parallel on/off, Aider-style edits, a reproduced fuzzy-match failure |
 | Sat | 3 to 4 h | Experiments 4 to 5; **Project increment**: v0.2 CLI, write T13 to T16 | Kill-and-resume verified; four new hidden-test tasks confirmed failing on a clean tree |
@@ -1165,7 +1176,8 @@ Tests, in `tests/test_runtime.py`, all driven by `FakeProvider` (no network, no 
 2. **Steering and follow-up** — `agent.py` owns two `queue.Queue`s; `cli.py` puts typed lines into one or the other; `runtime.run()` takes `get_steering()` and `get_follow_up()` callables. Drain steering after each tool batch and append it before the next request; drain follow-up only when a turn ends with no tool calls and no steering, and if it returns messages, keep looping. That's exactly pi's timing: steering polled at [L185](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L185) and [L304](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L304), follow-up only after the inner loop exits ([L311](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L310-L317)), with the queues themselves in [`PendingMessageQueue`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent.ts#L149-L180).
 3. **`edit_file` v2, in `tools/fs.py`** — detect the file's line ending, normalize file and `old_text` to LF, match, then restore the original ending on write ([`detectLineEnding`/`normalizeToLF`/`restoreLineEndings`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/tools/edit-diff.ts#L11-L31)). Accept `edits: list[{old_text, new_text}]`: validate every edit against the original content first, apply only if all match exactly once — all or nothing ([`applyEditsToNormalizedContent`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/tools/edit-diff.ts#L300)). When an edit doesn't match, raise `ToolError` naming which edit failed and listing the closest lines from `difflib.get_close_matches` — never apply them. Don't port `fuzzyFindText`; reproducing its failure is Friday's Experiment 3.
 4. **`session.py`** — `SessionLog(path)` with `append(type, payload, parent_id) -> id` (one flushed JSON line per entry: `{id, parent_id, type, payload}`), `load()`, and `branch(leaf_id)`, which walks `parent_id`s back to the root and returns the messages along that path. Resume = load, then continue from the last entry; fork = continue from any earlier `entry_id`, so new entries get it as `parent_id` and nothing is ever rewritten. `agent.py` appends every message as it goes, stored as `message.model_dump()`; because messages are rig's own types, a session recorded on one provider resumes on another. pi's equivalents: entry types ([L57](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/session-manager.ts#L57), [L183](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/session-manager.ts#L183)), [`appendMessage`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/session-manager.ts#L1204), [`getBranch`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/session-manager.ts#L1469), [`buildSessionContext`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/session-manager.ts#L1497), [`branch`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/session-manager.ts#L1579).
-5. **`cli.py`** — `argparse` subcommands: `rig run --task ...` (today's `scripts/run_agent.py`), `rig resume <session>`, `rig fork <session> <entry_id>`. While a run streams, read lines from stdin on a background thread; a line prefixed `/steer` goes to the steering queue, anything else to follow-up.
+5. **`commands.py` and `cli.py`** — `commands.py` holds one registry: `@command("config set", help=...)` registers a function `fn(ctx, args)`, where `ctx` carries the loaded config and an output stream, and `dispatch(words, ctx)` finds the longest registered name that prefixes the words and calls it with the rest. Register `run --task ...` (today's `scripts/run_agent.py`), `resume <session>`, `fork <session> <entry_id>` and step 6's `config` commands. `cli.py` is then a thin argv frontend: `rig config set model X` is `dispatch(["config", "set", "model", "X"], ctx)`, and `rig --help` lists the registry. Commands write through `ctx.out` and return a status instead of calling `print` or `sys.exit`, so a later interactive shell can run `/config set model X` through the same `dispatch` and keep going — pi's [`BUILTIN_SLASH_COMMANDS`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/slash-commands.ts#L19-L43) and Claude Code's [`/` commands](https://code.claude.com/docs/en/slash-commands) are exactly such a registry with a shell in front. While a run streams, read lines from stdin on a background thread; a line prefixed `/steer` goes to the steering queue, anything else to follow-up.
+6. **`config.py`** — a pydantic `Config` model where every key is typed and has a default (`provider`, `model`, `max_tokens`, a nested `budget` section, `base_url` for local servers), and `load(cwd, flags)`, which deep-merges, lowest first: the defaults; the user file `~/.config/rig/config.yaml` (`$XDG_CONFIG_HOME/rig/config.yaml` when that is set); the project file `.rig/config.yaml` in the nearest directory at or above `cwd` that has one; `RIG_*` environment variables (`RIG_MODEL`, `RIG_BUDGET__MAX_USD`); then command-line flags. Nested sections merge key by key, as pi's [`deepMergeSettings`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/settings-manager.ts#L142-L147) merges its global and project files ([`FileSettingsStorage`, L186–195](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/settings-manager.ts#L186-L195)). Accessors: `get(key)` with dotted keys (`budget.max_usd`), `set(key, value, scope="project" | "user")`, `unset(key, scope)`, and `origin(key)`, which names the layer a value came from. `set` must read only the target file, validate the new value against the model, change that one key and write the file back — never write the merged config, or every default and every user setting gets copied into the project file; pi does the same read-modify-write per scope in [`persistScopedSettings`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/settings-manager.ts#L598-L627). Commands: `rig config get KEY`, `rig config set KEY VALUE [--user]`, `rig config unset KEY [--user]`, `rig config list [--show-origin]`. Two safety rules: API keys never go in any config file (they stay in the environment, as in Week 1), and `base_url` is accepted only from the user file, because a project file comes from whoever wrote the repository — a `base_url` there would send your API key to their server. Use `yaml.safe_load` and `yaml.safe_dump` from PyYAML, which rig already depends on; note that rewriting a file drops its comments.
 
 Where the abort checks and the queue drains sit inside Tuesday's loop — the only lines that change:
 
@@ -1206,7 +1218,9 @@ def branch(self, leaf_id) -> list[Message]:           # resume = branch(last id)
 
 Tests: `tests/test_abort.py` — set the abort event at three points of a `FakeProvider` run (mid-stream, mid-parallel-batch, mid-edit) and assert that every `ToolCall` in the resulting messages has a matching `ToolResult` and that a resumed run's first request passes your orphan check. `tests/test_edit_file_v2.py` — a CRLF file keeps its CRLF after an edit; a two-edit list where the second misses leaves the file byte-identical; a near miss names the closest line in the error. `tests/test_session.py` — append five entries, fork from the third, append two more; the branch from the new leaf has five messages, and the file still holds all seven lines.
 
-**Done when:** Ctrl-C during streaming, during a parallel tool batch, and during an edit each leaves a session that `rig resume` continues and the API accepts — one test per case, driven by `FakeProvider`.
+`tests/test_config.py`, with `HOME` and the working directory pointed at `tmp_path`: a project value beats a user value beats the default, an env var beats the project file, and a flag beats everything; `set` in the project scope leaves the user file byte-identical and writes only that key; an invalid value is rejected without touching the file; `origin` names the right layer; a `base_url` in a project file is ignored with a warning.
+
+**Done when:** Ctrl-C during streaming, during a parallel tool batch, and during an edit each leaves a session that `rig resume` continues and the API accepts — one test per case, driven by `FakeProvider`; and `rig config set model X`, then a new `rig run`, uses `X`, with `rig config list --show-origin` showing where each value came from.
 
 ### Thursday — a second provider, AGENTS.md, then read pi's harness against your own code.
 **Goal.** rig runs the same task on OpenAI and OpenRouter by changing one flag; project instructions reach the model; you can narrate pi's prompt-to-tool-result path and its failure path from the trace alone.
@@ -1257,6 +1271,7 @@ Run Experiments 1 to 3 against T04 to T11 and write pass rate, steps, tokens and
 6. [ ] `rig/session.py`: append-only JSONL entries `{id, parent_id, type, payload}`; `rig resume <session>` and `rig fork <session> <entry_id>`.
 7. [ ] Load `AGENTS.md` from the repo root into the system prompt inside a clearly delimited block.
 8. [ ] `rig/providers/openai_chat.py`: one Chat Completions adapter for OpenAI, OpenRouter and any OpenAI-compatible endpoint, chosen with `--provider`. The runtime, session log and trace use rig's own message types, never a vendor's JSON.
+9. [ ] `rig/commands.py` and `rig/config.py`: one command registry that every frontend dispatches through, and layered config (defaults, `~/.config/rig/config.yaml`, the project's `.rig/config.yaml`, `RIG_*` variables, flags) with `rig config get|set|unset|list`.
 
 ## Project increment
 rig v0.2: a streaming CLI with interruptible runs and resumable sessions that runs on Anthropic, OpenAI or OpenRouter. Write four multi-file tasks of your own for the eval set (T13 to T16). One example: "Add a `click.Port` parameter type that accepts integers 1 to 65535, is exported from `click/__init__.py`, and describes its range in `--help`", graded by a hidden test you write first and confirm fails on the clean tree.
@@ -1292,6 +1307,7 @@ If you want a third data point, open a few of your own Claude Code transcripts (
 8. [ ] How does a branched session rebuild the model's context from a leaf entry?
 9. [ ] Why does `_omitRecoveryAttempt` append a context-edit entry instead of deleting the failed message?
 10. [ ] Which differences between Anthropic's Messages API and OpenAI's Chat Completions does each adapter absorb, and why is thinking written by one model dropped before the conversation goes to another?
+11. [ ] Why does `rig config set` rewrite one key in one file instead of saving the merged config, and why must `base_url` never come from a project file?
 
 ## Experiments
 1. [ ] Run rig's eval set with parallel read-only tools on and off. Record wall time and whether results change.
@@ -1305,9 +1321,10 @@ If you want a third data point, open a few of your own Claude Code transcripts (
 - **Cancellation semantics** are an API contract: every abort path has a test that the next request is valid.
 - **Provider failures** become a typed error enum (retryable overload, rate limit, invalid request, context overflow, auth) instead of string matching.
 - **Rate limits** under parallel evals: a shared token bucket across runs, not per-run backoff alone.
+- **Config files are untrusted input.** A project's `.rig/config.yaml` arrives with every clone. Anything that changes where requests go or what runs (endpoints, later hooks and MCP servers) must come from the user's own file or an explicit trust decision, the way pi's `defaultProjectTrust` can only be set in the user's settings.
 
 ## Not yet
-Other harnesses (OpenCode, Codex CLI, OpenHands) beyond the files named here; pi's `packages/durable`, `mcp`, `server` and `codemode`; TUI rendering code; provider-specific features such as server-side tools; OpenAI's Responses API (better for its reasoning models, but served only by OpenAI); choosing between providers per request, which a later week's model router covers.
+Other harnesses (OpenCode, Codex CLI, OpenHands) beyond the files named here; pi's `packages/durable`, `mcp`, `server` and `codemode`; TUI rendering code; provider-specific features such as server-side tools; OpenAI's Responses API (better for its reasoning models, but served only by OpenAI); choosing between providers per request, which a later week's model router covers; an interactive `rig shell` with `/` commands, which Week 12 builds on this week's command registry.
 
 ## Checkpoint
 - [ ] You can draw pi's three layers and place every file you read in one of them.
@@ -3650,7 +3667,7 @@ The week's real test is a single planted question — why did revenue fall? — 
 | Wed | 2–4 h | Build steps 3-4: `artifacts/store.py`; the fixture folder and task | `sales.csv`, `marketing.csv`, `earnings.pdf` built with a planted cause; the task runs end to end once |
 | Thu | 2–2.5 h | Build step 5: eval assertions W01-W10; read and trace the OpenHands agent/workspace path | Computed values, sources, artifacts and the planted cause all check automatically |
 | Fri | 1.5–2 h | Run experiments 1-3 | Numbers on what the `python` tool and recomputation actually catch |
-| Sat | 3–4 h | Build steps 6-7: `rig audit`; `rig/ingest/` with Docling; read docling-core's chunkers | An artifact's lineage replays in a fresh workspace; uploaded PDFs are chunked and searchable |
+| Sat | 3–4 h | Build steps 6-7: `rig audit`; `rig/ingest/` with Docling; read docling-core's chunkers; optionally step 8, `rig shell` | An artifact's lineage replays in a fresh workspace; uploaded PDFs are chunked and searchable |
 | Sun | 2–3 h | Run remaining experiments; checkpoint | The revenue task solved with a traceable report; checkpoint passed or a redo list |
 
 ### Monday — the workspace boundary and lineage, before you build either.
@@ -3720,6 +3737,7 @@ Run Experiments 1–3 below. For Experiment 2, add a `--plant-error join|units|q
 1. **`rig/audit.py`** — `rig audit <artifact_id>`: load the artifact; walk its lineage backwards (inputs that are themselves artifacts get their own cells replayed first); create a fresh `LocalWorkspace` with only the original input files (verified by hash — refuse if any differ); rerun the cells in order; compare the new file's hash with the recorded one and, if different, show a diff (text) or both values (for CSV, a per-cell diff).
 2. **`rig/ingest/`** — `parse.py`: Docling's converter (see its [docs](https://docling-project.github.io/docling/)) turns PDF and DOCX into a `DoclingDocument`. `chunk.py`: docling-core's [`HybridChunker`](https://github.com/docling-project/docling-core/blob/v2.101.1/docling_core/transforms/chunker/hybrid_chunker.py#L55) with a token limit matched to your Week 4 embedding model, tables kept whole and serialized as triplets ([`TripletTableSerializer`](https://github.com/docling-project/docling-core/blob/v2.101.1/docling_core/transforms/chunker/hierarchical_chunker.py#L46)). `contextualize.py`: first the heading path ([`contextualize`](https://github.com/docling-project/docling-core/blob/v2.101.1/docling_core/transforms/chunker/base.py#L82)), then optionally a 50–100-token model note per chunk, with the whole document as a cached prefix (Week 3's `cache_policy.py`) so each note costs only the chunk's tokens. `index.py`: insert into Week 4's `chunks` table with `content_hash`, `parser_version` and `chunker_version`; skip a file whose three hashes are unchanged.
 3. Read docling-core per **Read** below: [`_split_by_doc_items`](https://github.com/docling-project/docling-core/blob/v2.101.1/docling_core/transforms/chunker/hybrid_chunker.py#L161), [`_merge_chunks_with_matching_metadata`](https://github.com/docling-project/docling-core/blob/v2.101.1/docling_core/transforms/chunker/hybrid_chunker.py#L344), [`chunk`](https://github.com/docling-project/docling-core/blob/v2.101.1/docling_core/transforms/chunker/hybrid_chunker.py#L390).
+4. **Optional: `rig/shell.py`, an interactive shell (about 1.5 h more).** `rig shell` opens a prompt loop like Claude Code's [interactive mode](https://code.claude.com/docs/en/interactive-mode): a line that starts with `/` goes to Week 2's `commands.dispatch` (`/config set model ...`, `/resume`, `/fork`); anything else is a user turn sent through `Agent.events()` and rendered as it streams, and Ctrl-C aborts that turn, not the shell. Because every command writes to `ctx.out` and returns instead of exiting, the shell is only a frontend, and by now each command is a few lines over code you already have: `/model` and `/effort` (Week 8's gateway), `/compact` (Week 3's `Compaction`), `/usage` (this session's tokens and dollars from Week 3's ledger), `/mcp` (Week 9's client: servers and their tools), `/audit` (step 1). Use [`prompt_toolkit`](https://python-prompt-toolkit.readthedocs.io/en/stable/) for history and for tab-completing command names straight from the registry, and load user-defined commands from `.rig/commands/*.md`, where each Markdown file is a prompt template that becomes `/name`, the way Claude Code loads `.claude/commands/` ([commands](https://code.claude.com/docs/en/slash-commands)). pi's built-in list, [`BUILTIN_SLASH_COMMANDS`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/slash-commands.ts#L19-L43), is a good menu to choose from.
 
 Tests: `test_audit.py` — auditing an untouched artifact reports a hash match; editing an input file makes the audit refuse. `test_ingest.py` — `earnings.pdf`'s table comes out as one chunk; re-ingesting an unchanged file inserts nothing.
 
@@ -3742,6 +3760,7 @@ Tests: `test_audit.py` — auditing an untouched artifact reports a hash match; 
 5. [ ] Eval assertions W01–W10: computed values within tolerance, the expected columns and sources used, artifacts exist and open, a chart was produced, the report names the planted cause, and the generated code re-executes to the same numbers.
 6. [ ] `rig audit <artifact>`: re-runs an artifact's lineage in a fresh workspace and diffs the result.
 7. [ ] `rig/ingest/`: parse uploaded PDF and DOCX files with Docling into a structured document, chunk them with its hybrid chunker (tables whole), add context (the heading path, then a model-written note with the whole document as a cached prefix), and index the chunks into Week 4's Postgres tables. Re-ingest a file only when its hash, the parser version or the chunker version changes.
+8. [ ] Optional: `rig shell`, an interactive prompt where `/` lines dispatch to Week 2's command registry (`/config`, `/model`, `/compact`, `/usage`, `/mcp`, `/audit`, plus user commands from `.rig/commands/`) and everything else is a turn for the agent.
 
 ```python
 @dataclass(frozen=True)
