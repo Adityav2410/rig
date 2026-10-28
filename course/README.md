@@ -8,8 +8,10 @@ Open http://localhost:8765. Ticks, notes and the last page you visited are writt
 
 - Other devices on your network: `python3 serve.py --host 0.0.0.0`, then open
   `http://<this-machine>:8765`. Put it behind your reverse proxy with auth if it leaves your LAN.
-- Back up or sync: commit `progress.json` to git, or keep this folder in a synced directory.
-- Docker: `docker run -d --name rig-study -p 8765:8765 -v "$PWD":/app -w /app --restart unless-stopped python:3.12-slim python serve.py --host 0.0.0.0`
+- Back up or sync: copy `progress.json` somewhere safe. It is gitignored on purpose: this folder
+  is part of a public repository, and your ticks and notes shouldn't be published with it.
+- Docker: `docker compose up -d --build` from this folder starts the `ai-study` container on
+  `127.0.0.1:8765`, serving this folder live, so `make course` (from the repo root) updates the site.
 - Opening `index.html` directly (file://) also works, but progress then lives only in that
   browser's storage.
 

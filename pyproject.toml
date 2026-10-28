@@ -40,7 +40,7 @@ pythonpath = ["."]
 [tool.ruff]
 target-version = "py314"
 line-length = 100
-extend-exclude = ["study-plan.md"]  # course plan copied from rig-study; its snippets are illustrative
+extend-exclude = ["study-plan.md"]  # generated course plan; its snippets are illustrative
 
 [tool.ruff.lint]
 select = [
