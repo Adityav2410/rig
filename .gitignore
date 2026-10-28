@@ -22,6 +22,5 @@ evals/results.jsonl
 .DS_Store
 
 # Local notes and logs
-next-steps.md
 logs.txt
 *.log
