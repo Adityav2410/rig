@@ -1,0 +1,13 @@
+[tool.ruff]
+line-length = 125
+target-version = "py39"
+extend-exclude = ["content", "templates", "__pycache__"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = [
+  "UP031", # percent-formatting — this codebase's consistent, deliberate string-formatting style
+]
+
+[tool.ruff.format]
+quote-style = "preserve"

@@ -1,0 +1,266 @@
+[
+  {
+    "id": "path",
+    "group": "Start here",
+    "title": "The path I chose",
+    "short": "The path"
+  },
+  {
+    "id": "primitives",
+    "group": "Start here",
+    "title": "The primitives behind the vocabulary",
+    "short": "Primitives"
+  },
+  {
+    "id": "rig",
+    "group": "Start here",
+    "title": "The central project: rig",
+    "short": "The rig project"
+  },
+  {
+    "id": "w1",
+    "group": "Weeks",
+    "title": "Week 1: the single-agent loop",
+    "short": "Week 1",
+    "meta": {
+      "n": 1,
+      "focus": "The single-agent loop",
+      "code": "mini-swe-agent",
+      "phase": "The machine"
+    }
+  },
+  {
+    "id": "w2",
+    "group": "Weeks",
+    "title": "Week 2: the coding-agent harness",
+    "short": "Week 2",
+    "meta": {
+      "n": 2,
+      "focus": "The coding-agent harness",
+      "code": "pi, Aider's edit blocks",
+      "phase": "The machine"
+    }
+  },
+  {
+    "id": "w3",
+    "group": "Weeks",
+    "title": "Week 3: context engineering, compaction, memory and caching",
+    "short": "Week 3",
+    "meta": {
+      "n": 3,
+      "focus": "Context, compaction, memory and caching",
+      "code": "pi compaction, SGLang radix cache",
+      "phase": "The machine"
+    }
+  },
+  {
+    "id": "w4",
+    "group": "Weeks",
+    "title": "Week 4: retrieval",
+    "short": "Week 4",
+    "meta": {
+      "n": 4,
+      "focus": "Retrieval",
+      "code": "rank_bm25, hnswlib, pgvector, Aider repo map",
+      "phase": "The machine"
+    }
+  },
+  {
+    "id": "w5",
+    "group": "Weeks",
+    "title": "Week 5: tracing, evals and trajectory evaluation",
+    "short": "Week 5",
+    "meta": {
+      "n": 5,
+      "focus": "Tracing, evals and trajectory evaluation",
+      "code": "SWE-bench, inspect_ai, OTel GenAI",
+      "phase": "The machine"
+    }
+  },
+  {
+    "id": "w6",
+    "group": "Weeks",
+    "title": "Week 6: the model, from tokenizer to KV cache",
+    "short": "Week 6",
+    "meta": {
+      "n": 6,
+      "focus": "The model, from tokenizer to KV cache",
+      "code": "nanochat",
+      "phase": "The model"
+    }
+  },
+  {
+    "id": "w7",
+    "group": "Weeks",
+    "title": "Week 7: serving and post-training",
+    "short": "Week 7",
+    "meta": {
+      "n": 7,
+      "focus": "Serving and post-training",
+      "code": "nano-vllm, nanochat RL, verifiers",
+      "phase": "The model"
+    }
+  },
+  {
+    "id": "w8",
+    "group": "Weeks",
+    "title": "Week 8: model routing, reasoning effort and the cost layer",
+    "short": "Week 8",
+    "meta": {
+      "n": 8,
+      "focus": "Model routing, reasoning effort and cost",
+      "code": "pi virtual models, RouteLLM, LiteLLM router",
+      "phase": "The model"
+    }
+  },
+  {
+    "id": "w9",
+    "group": "Weeks",
+    "title": "Week 9: tools, MCP, sandboxing and policy",
+    "short": "Week 9",
+    "meta": {
+      "n": 9,
+      "focus": "Tools, MCP, sandboxing and policy",
+      "code": "pi MCP client, MCP SDK, sandbox-runtime",
+      "phase": "The assistant"
+    }
+  },
+  {
+    "id": "w10",
+    "group": "Weeks",
+    "title": "Week 10: a mini-Perplexity",
+    "short": "Week 10",
+    "meta": {
+      "n": 10,
+      "focus": "A mini-Perplexity",
+      "code": "SearXNG, Trafilatura, cookbook search server",
+      "phase": "The assistant"
+    }
+  },
+  {
+    "id": "w11",
+    "group": "Weeks",
+    "title": "Week 11: deep research and multi-agent systems",
+    "short": "Week 11",
+    "meta": {
+      "n": 11,
+      "focus": "Deep research and multi-agent systems",
+      "code": "Swarm, Agents SDK, search_evals",
+      "phase": "The assistant"
+    }
+  },
+  {
+    "id": "w12",
+    "group": "Weeks",
+    "title": "Week 12: a Claude-style workbench",
+    "short": "Week 12",
+    "meta": {
+      "n": 12,
+      "focus": "A Claude-style workbench",
+      "code": "OpenHands Software Agent SDK, docling-core",
+      "phase": "The assistant"
+    }
+  },
+  {
+    "id": "w13",
+    "group": "Weeks",
+    "title": "Week 13: memory, personalization and connectors",
+    "short": "Week 13",
+    "meta": {
+      "n": 13,
+      "focus": "Memory, personalization and connectors",
+      "code": "Letta Code, Codex memory",
+      "phase": "The assistant"
+    }
+  },
+  {
+    "id": "w14",
+    "group": "Weeks",
+    "title": "Week 14: a multi-user service",
+    "short": "Week 14",
+    "meta": {
+      "n": 14,
+      "focus": "A multi-user service",
+      "code": "Open WebUI, pgvector filtering, procrastinate",
+      "phase": "The assistant"
+    }
+  },
+  {
+    "id": "w15",
+    "group": "Weeks",
+    "title": "Week 15: durable workflows, scheduling and approvals",
+    "short": "Week 15",
+    "meta": {
+      "n": 15,
+      "focus": "Durable workflows, scheduling and approvals",
+      "code": "DBOS, LangGraph, OpenHands automation",
+      "phase": "Autonomy"
+    }
+  },
+  {
+    "id": "w16",
+    "group": "Weeks",
+    "title": "Week 16: browser and computer use",
+    "short": "Week 16",
+    "meta": {
+      "n": 16,
+      "focus": "Browser and computer use",
+      "code": "browser-use",
+      "phase": "Autonomy"
+    }
+  },
+  {
+    "id": "w17",
+    "group": "Weeks",
+    "title": "Week 17: voice and realtime",
+    "short": "Week 17",
+    "meta": {
+      "n": 17,
+      "focus": "Voice and realtime",
+      "code": "pipecat",
+      "phase": "Autonomy"
+    }
+  },
+  {
+    "id": "w18",
+    "group": "Weeks",
+    "title": "Week 18: production architecture, capability evals and your graduation project",
+    "short": "Week 18",
+    "meta": {
+      "n": 18,
+      "focus": "Production architecture and graduation",
+      "code": "Your own traces",
+      "phase": "Autonomy"
+    }
+  },
+  {
+    "id": "app-a",
+    "group": "Appendices",
+    "title": "Appendix A: reading order",
+    "short": "Appendix A: reading order"
+  },
+  {
+    "id": "app-b",
+    "group": "Appendices",
+    "title": "Appendix B: glossary, term to primitive",
+    "short": "Appendix B: glossary"
+  },
+  {
+    "id": "app-c",
+    "group": "Appendices",
+    "title": "Appendix C: seventeen questions you should be able to answer",
+    "short": "Appendix C: seventeen questions you should be able to answer"
+  },
+  {
+    "id": "app-d",
+    "group": "Appendices",
+    "title": "Appendix D: misconceptions and hype traps",
+    "short": "Appendix D: misconceptions and hype traps"
+  },
+  {
+    "id": "app-e",
+    "group": "Appendices",
+    "title": "Appendix E: staying current and showing the work",
+    "short": "Appendix E: staying current and showing the work"
+  }
+]
