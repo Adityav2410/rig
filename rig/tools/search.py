@@ -11,6 +11,7 @@ MAX_MATCHES = 200
 
 @tool(
     name="search",
+    read_only=True,
     description="Search tracked files under `path` for `pattern` using ripgrep — the fastest "
     "way to find where something is defined or used, before reading or editing it. Returns "
     f"one `path:line:text` line per match, capped at {MAX_MATCHES} matches; narrow `pattern` "

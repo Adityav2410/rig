@@ -17,6 +17,7 @@ def tool(
     description: str = "",
     input_schema: ToolInputSchema,
     input_examples: list[dict[str, Any]],
+    read_only: bool = False,
 ) -> Callable[[Callable[P, R]], Callable[P, R]]:
     if name is not None and len(name) == 0:
         raise ValueError("Invalid tool name. Provided empty string which isn't allowed.")
@@ -26,7 +27,9 @@ def tool(
         def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
             return func(*args, **kwargs)
 
-        _register_tool(name or func.__name__, description, input_schema, input_examples, func)
+        _register_tool(
+            name or func.__name__, description, input_schema, input_examples, func, read_only
+        )
         return wrapper
 
     return register_func
@@ -38,6 +41,7 @@ def _register_tool(
     input_schema: ToolInputSchema,
     input_examples: list[dict[str, Any]],
     func: Callable[..., Any],
+    read_only: bool = False,
 ) -> None:
     global _TOOLS
     if len(name) == 0:
@@ -57,6 +61,7 @@ def _register_tool(
         input_schema=input_schema,
         input_examples=input_examples,
         func=func,
+        read_only=read_only,
     )
     _TOOL_NAMES.append(name)
     _TOOL_NAMES.sort()

@@ -4,6 +4,7 @@ a full agent run, grading inside the still-running sandbox, one line to results.
 
 import argparse
 import json
+import logging
 import re
 import subprocess
 import uuid
@@ -106,7 +107,9 @@ def grade_pytest(task: dict[str, Any], snap_dir: Path, ws: Workspace) -> dict[st
     }
 
 
-def run_one(task: dict[str, Any], repeat: int, model: str, ref: str, results_path: Path) -> None:
+def run_one(
+    task: dict[str, Any], repeat: int, model: str, ref: str, results_path: Path, provider: str
+) -> None:
     run_id = str(uuid.uuid4())
     run_dir = RUNS_DIR / run_id
     run_dir.mkdir(parents=True)
@@ -124,8 +127,8 @@ def run_one(task: dict[str, Any], repeat: int, model: str, ref: str, results_pat
     status = "error"
     final_response = ""
     with ws:
-        agent = Agent(ws=ws, task=task["prompt"], model=model, budget=budget, trace=trace)
-        result = agent.run()
+        agent = Agent(ws, model=model, budget=budget, trace=trace, provider=provider)
+        result = agent.run(task["prompt"])
         status = result.status
         final_response = result.final_response
 
@@ -159,11 +162,14 @@ def run_one(task: dict[str, Any], repeat: int, model: str, ref: str, results_pat
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO)
+    logging.getLogger("rig").setLevel(logging.DEBUG)
     parser = argparse.ArgumentParser()
     parser.add_argument("--runs", type=int, default=1, help="Repeats per task")
     parser.add_argument("--tasks", type=Path, default=REPO_ROOT / "evals" / "tasks" / "week1.yaml")
     parser.add_argument("--results", type=Path, default=REPO_ROOT / "evals" / "results.jsonl")
     parser.add_argument("--model", default="claude-haiku-5-5")
+    parser.add_argument("--provider", default="anthropic", help="Which model API to call")
     parser.add_argument("--ref", default="HEAD", help="git ref in workspaces/click to snapshot")
     parser.add_argument("--task-id", default=None, help="Run only this one task id")
     args = parser.parse_args()
@@ -175,7 +181,7 @@ def main() -> None:
     RUNS_DIR.mkdir(exist_ok=True)
     for task in tasks:
         for repeat in range(args.runs):
-            run_one(task, repeat, args.model, args.ref, args.results)
+            run_one(task, repeat, args.model, args.ref, args.results, args.provider)
 
 
 if __name__ == "__main__":

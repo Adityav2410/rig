@@ -77,6 +77,7 @@ def edit_file(ws: Workspace, path: str, old_text: str, new_text: str) -> str:
 
 @tool(
     name="list_files",
+    read_only=True,
     description="List files tracked by git under a directory, relative to the workspace root. "
     "Use this to see what exists in the repository before reading or searching it. Equivalent "
     "to `git ls-files <path>`: build output, caches, and anything git-ignored are excluded "
@@ -117,6 +118,7 @@ def list_files(ws: Workspace, path: str = ".") -> str:
 
 @tool(
     name="read_file",
+    read_only=True,
     description="Read a text file's contents with 1-indexed line numbers prefixed to each "
     "line, so you can cite exact locations and target `edit_file` calls precisely. Reads up "
     "to `limit` lines starting at `offset` (both 1-indexed); if the file is longer than that, "
