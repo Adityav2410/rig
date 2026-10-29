@@ -72,7 +72,9 @@ def build_tools(ws: Workspace) -> list[RuntimeTool]:
         call = partial(_call_tool, ws, t.name)
         lock_key = partial(_edited_path, ws) if t.name == "edit_file" else None
         spec = ToolSpec(
-            name=t.name, description=t.description, parameters=t.input_schema.model_dump()
+            name=t.name,
+            description=t.description,
+            parameters=t.input_schema.model_dump(exclude_none=True),
         )
         tools.append(RuntimeTool(spec=spec, run=call, read_only=t.read_only, lock_key=lock_key))
     return tools

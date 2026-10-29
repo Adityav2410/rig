@@ -28,7 +28,7 @@ def run_tool(ws: Workspace, name: str, **kwargs: Any) -> tuple[str, bool]:
         error_msg, exc = f"Error executing tool: {name}. {e}", e
 
     if error_msg:
-        logger.exception(error_msg, exc)
+        logger.error(error_msg, exc_info=exc)  # outside the except block, so pass exc itself
         return truncate(error_msg), True
     return truncate(out), False
 
