@@ -192,38 +192,42 @@ bounded look for adjacent rot — but keep it bounded, and say plainly what
 you checked and what you didn't, rather than implying an exhaustive audit
 happened when it didn't.
 
-## 10. Every week page follows one format: objective first, then prescriptive days
+## 10. Every week page follows one format: orient in one screen, then typed blocks
 
-Readers kept saying the same thing: the material was all there, but spread across sections, so
-building anything meant scrolling between the day plan, the build list and the reading list. The
-fix is one fixed shape per week, top-down, with the references pulled into the step that needs
-them. `content/w2.md` is the canonical example; match it.
+The first fix (one top-down shape per week, references pulled into the step that needs them)
+solved the scrolling problem but left about 33,000 words in one visual register: nothing told
+the eye what to read first, what to do, or what mattered. The redesign keeps every word and
+changes the shape: each week opens with a hero that answers what, why and how long, and every
+section below it is one typed block in the same order on all 18 weeks. The source of these
+rules is the **Study Site Redesign Spec**; `content/w3.md` is the canonical converted week
+(the pilot) and `#_components` shows every component. Weeks not yet converted keep the older
+shape (intro, pinning note, Concepts, objective and layout, day by day, then the reference
+sections) until the roll-out reaches them; the template renders both.
 
-Order of sections in `wN.md`:
+Order of sections in a converted `wN.md`:
 
-1. **Intro paragraph** — what gets built this week and why it matters, in two or three sentences.
-2. **Pinning note** — every reference repo the week links to, pinned to one commit, with the
-   `git checkout <sha>` to match it locally.
-3. **Concepts** — short bullets; each one ends with a link to a real doc or a pinned line that
-   shows the idea in code.
-4. **This week's objective and target layout** (`{#wN-repository-layout}`):
-   - **Objective** — what works by Sunday, stated as observable behavior.
-   - **What changes** — a table: file, layer or role, its one job, the reference counterpart
-     (pinned link), the day it's built.
-   - The folder tree as it should look on Sunday.
-   - **How it fits together** — 15 to 30 lines of pseudocode showing how the new files call each
-     other end to end. This is the single most useful block on the page; never skip it.
-   - **Why this achieves the objective**, plus the one invariant to keep (for example "keep
-     `Agent`'s signature so `run_evals.py` never changes").
-5. **Day by day** (`{#wN-day-by-day}`) — the summary table, then one `###` per day, each with:
-   **Goal.** (one or two sentences) · **Why.** (one or two sentences) · numbered steps, each
-   naming the exact file, what goes in it, and the pinned reference line inline ·
-   short code or pseudocode where the shape isn't obvious from prose · the tests to write ·
-   **Done when:** an observable, checkable result. Reading days say exactly which lines to read,
-   in order, and what to look for in each.
-6. Then the existing reference sections, unchanged in order: **Build** checklist, project
-   increment, the consolidated reading map, **You should be able to answer**, **Experiments**,
-   production lens, not yet, **Checkpoint**.
+0. **Hero** — a `::: hero` block: `- Lead:` (the intro's first sentence) and 3 to 5
+   `- Outcome:` lines condensed from the Checkpoint items. Time (summed from the day timeline)
+   and Ships (the Project increment's first sentence) are derived by `tools/build.py`; a field
+   that can't be derived shows a TODO chip, never a guess.
+1. **Key idea** (`{#wN-key-idea}`) — the rest of the intro paragraph in a `key-idea` block,
+   plus the week's diagram.
+2. **Concepts** — one `{.concept title=".."}` card per idea: the bold term is the title, the first
+   sentence the definition, everything else in a `details` disclosure whose summary names it.
+3. **Build** — the checkable steps (`{.tasks cat="build"}`), then the old long-form sections as
+   collapsible sub-sections (`{.sub}`), in this order: **Day by day** as a timeline (one
+   `{.day}` per day: Time, Do, Working by end of day visible; Goal, Why, steps, tests and Done
+   when in its disclosure), then **This week's objective and target layout** (objective, what
+   changes, folder tree, how it fits together, why). Both keep their old heading ids.
+4. **Project increment** — lead = its first sentence; the rest as `increment` fields.
+5. **Read** — a pinned-commits block, then one `{.read title=.. commit=..}` card per source:
+   files in reading order visible, function-and-line listings in a disclosure.
+6. **Experiments** — `{.tasks cat="exp"}`, each step with Change / Measure / Expect, using only
+   what the item states.
+7. **You should be able to answer** — `{.tasks cat="q"}`, questions verbatim.
+8. **Production lens** — a `production` block: titles visible, bodies collapsed.
+9. **Not yet** — a `scope` block, one comma-separated line.
+10. **Checkpoint** — `{.tasks cat="check"}`; renders as the filled exit-gate panel.
 
 Rules that apply throughout:
 
@@ -234,12 +238,46 @@ Rules that apply throughout:
   message — parsing partial JSON buys nothing here").
 - **Steps state what each file is *for*,** not only where its reference lives (§7).
 - **No same-page `#id` links** (§3) — refer to other sections by **bold name**.
-- **The markdown engine's limits** (§1): list items are single lines; code fences start at column
-  0, never nested inside a list item; a step that needs a code block is a bold-lead paragraph.
-- **Never touch the checklists** (§2): Build, questions, experiments and checkpoint lines stay
-  byte-identical; heading ids stay stable.
+- **Restructure, never change meaning.** Move words into the right component and split long
+  sentences; copy numbers, versions, hashes, prices, names and URLs character for character. If a
+  split would change meaning, keep the original sentence intact in Details.
+- **Task ids never move** (§2): a step's position inside its `.tasks` block is its id. You may
+  rewrite an item into a short title plus fields; you may not reorder, insert or delete items.
+  Write the expected id on each step (`id="w3.build.4"`) so the build fails if one shifts.
 - **Don't teach later weeks early.** A day may point forward ("Week 9 revisits this"), never build it.
 
-Verify every rewritten week mechanically: checklists identical to the committed version, every
-old heading id still present, a clean render through `tools/mdx.py` (no leaked fences, no
-same-page links), no unpinned GitHub links, every external link returning 200.
+## 11. The design system: tokens, components, and how to check a page
+
+The site is assembled from a small component library; no page styles content ad hoc.
+
+- **Tokens only.** Every colour, size and space in `tools/template.html` comes from the `:root`
+  token blocks (light, dark under `prefers-color-scheme`, and dark again under
+  `[data-theme="dark"]`). No hex value outside them.
+- **Colour carries meaning, and only one meaning.** Six hues mark kinds of content: blue concept
+  (and production notes), green build (and the project increment), violet experiment, amber
+  check (self-check, checkpoint), slate read (and not yet), red pitfall. Teal is the accent:
+  links, buttons, focus, progress and the current location, never a content kind. The four
+  phases are steps of the teal ramp and fill bars and bands only, never text.
+- **Never colour alone.** Every block has an icon and a text label; progress states are shapes
+  (hollow, half, filled with a check, ring for the current page), so everything reads in greyscale.
+- **Only three blocks are filled:** the key idea, pitfalls, and the checkpoint panel. Everything
+  else is a white card with a coloured left rule, so a page never turns into a rainbow.
+- **Short visible layer, detail on demand.** Paragraphs at most 3 sentences and 60 words; visible
+  bullets at most 20 words; checkable titles at most 12 words; every section opens with a lead
+  sentence of at most 25 words. Detail goes into a native `<details>` whose summary says what is
+  inside ("How serving engines store it", never "More"). Search opens the disclosure that holds
+  a match.
+- **Draw structure.** An order, a flow or a layering with 3 or more parts is an inline SVG with
+  `role="img"`, an `aria-label` stating the takeaway, and a caption repeating it. Draw with the
+  `dg-*` classes so figures follow the theme; keep them within 720 px (560 px minimum, scrolling
+  inside the figure).
+- **Links to a block** use `#page/anchor` (for example `#w3/c-w3-build-6-b`); a bare `#page` still
+  works, and the router never treats the part after the slash as a page.
+
+Check a page with the browser, not a diff (§4). For a converted week, run the spec's lint
+snippet in the console and compare with the page's own baseline: visible words at most half,
+no visible chunk over 60 words, at most 3 inline code spans per 100 visible words, at least one
+diagram, no section without a lead. Then a fidelity diff (every task id, URL, commit hash, repo
+name and number from before still present), axe-core with zero serious issues in both themes, no
+horizontal scroll from 320 px up, and a saved progress state that shows identically before and
+after.

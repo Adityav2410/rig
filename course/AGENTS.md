@@ -15,11 +15,11 @@ into an unrelated project.
   for titles/groups/week metadata.
 - `index.html` is **generated** — never hand-edit it. After editing a file under
   `content/`, run `python3 tools/build.py` to regenerate it.
-- `tools/mdx.py` is a small, dependency-free markdown↔HTML engine matching exactly the
+- `tools/mdx.py` is a small, dependency-free markdown→HTML engine matching exactly the
   markup `index.html`'s JS app expects (see its docstring for the dialect: `##`/`###`
   headings with `{#id}` anchors — `###` nests under the preceding `##` in the page's
-  "On this page" outline — `<!-- tasks:CAT -->` checklist blocks, ```raw-html```
-  passthrough). It supports exactly this subset, not full CommonMark; check it before
+  "On this page" outline — `<!-- tasks:CAT -->` checklist blocks, `:::` typed blocks,
+  ```raw-html``` passthrough). Its `html_to_md` reads only the original pre-redesign markup. It supports exactly this subset, not full CommonMark; check it before
   assuming a markdown feature works.
 - `tools/export.py` regenerates `templates/study-plan.md`, a single clean markdown file
   with the same content, meant for pointing an AI assistant at the whole plan at once.
@@ -33,14 +33,18 @@ into an unrelated project.
   touch `content/*.md` — see the dialect note above; a generic formatter would
   corrupt the custom markdown syntax.
 
-**Week pages have a fixed format** — objective and target layout with "how it fits together"
-pseudocode first, then prescriptive day-by-day steps with pinned code references inline. Follow
-`GUIDELINES.md` §10 for every edit to `content/w*.md`, and use `content/w2.md` as the model.
+**Week pages have a fixed format** — a hero that orients in one screen, then typed blocks
+(`::: {.concept ...}`, `::: {.tasks cat="build"}`, ...) in a fixed section order. Follow
+`GUIDELINES.md` §10 for every edit to `content/w*.md` and §11 for anything visual; the typed-block
+dialect is documented in `tools/mdx.py`'s docstring. `content/w3.md` is the converted model;
+weeks not yet converted keep the older shape until the roll-out reaches them. Every component is
+rendered on the hidden page `#_components` (`content/_components.md`), in both themes.
 
-Checklist `data-id`s (e.g. `w1.check.3`) are assigned by position within a task list and
-are what a reader's ticked-checkbox progress is keyed on. Don't reorder or delete existing
-task lines in a week file — append new ones at the end instead — or a reader's saved
-progress silently detaches from a different task.
+Checklist `data-id`s (e.g. `w1.check.3`) are assigned by position within a task list (or a
+`::: {.tasks}` block) and are what a reader's ticked-checkbox progress is keyed on. Don't
+reorder or delete existing tasks in a week file — append new ones at the end instead — or a
+reader's saved progress silently detaches from a different task. In typed blocks, write the
+expected id on each step (`id="w3.build.4"`); the build fails if a position shifts.
 
 After any content change: run `python3 tools/build.py && python3 tools/export.py`, then
 sanity-check `index.html` actually renders (a JSON/text diff is not enough — the app's JS
