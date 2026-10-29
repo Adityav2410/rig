@@ -97,3 +97,11 @@ def test_an_llm_error_keeps_its_cause_in_the_status_and_the_trace(tmp_path: Path
     error = next(e["fields"] for e in lines if e["kind"] == "error")
     assert error["status"] == "error.llm.429" and error["payload"] == {"request_id": "req_1"}
     assert lines[-1]["kind"] == "run.end" and lines[-1]["fields"]["status"] == "error.llm.429"
+
+
+def test_without_a_trace_the_agent_runs_and_writes_nothing(tmp_path: Path) -> None:
+    ws = Workspace(root=tmp_path, name="test", run_id="test", use_sandbox=False)
+    agent = Agent(ws, budget=Budget.get_dummy_budget(), provider=FakeProvider([text_turn("ok")]))
+
+    assert agent.run("go").status == "success"
+    assert list(tmp_path.iterdir()) == []

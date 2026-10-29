@@ -18,6 +18,13 @@ class TraceEvent(BaseModel):
     fields: dict[str, Any]
 
 
+class NullTrace:
+    """A trace that records nothing: for library callers and tests that don't want a file."""
+
+    def log_event(self, kind: str, **fields: Any) -> None:
+        pass
+
+
 class Trace:
     def __init__(self, run_id: str, filepath: str) -> None:
         self.run_id = run_id
