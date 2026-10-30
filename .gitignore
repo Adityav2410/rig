@@ -12,6 +12,8 @@ wheels/
 workspaces/
 traces/
 runs/
+.rig/sessions/
+.rig/traces/
 evals/results.jsonl
 # Tool caches
 .mypy_cache/

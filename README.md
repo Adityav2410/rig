@@ -52,11 +52,21 @@ git clone https://github.com/pallets/click workspaces/click
 git -C workspaces/click checkout 8.5.0
 ```
 
-Run the agent once:
+Run the agent:
 
 ```bash
-uv run python scripts/run_agent.py
+uv run rig run --repo workspaces/click --task "Where is IntRange validated?"   # prints a session id
+uv run rig resume <session> --task "Now add a test"     # continue that conversation
+uv run rig show <session>                               # list its entries
+uv run rig fork <session> <entry_id> --task "..."       # branch from an earlier entry
 ```
+
+While a run streams, Ctrl-C stops it at the next safe point (twice quits), a line starting
+with `/steer` redirects the current task, and any other line queues the next one. `rig resume`
+with no `--task` finishes a run that was interrupted. Sessions live in `.rig/sessions/`, traces
+in `.rig/traces/`. The workspace is the current directory unless you pass `--repo`, and tools
+run on the host unless you pass `--use-sandbox` (Docker). `./rig.sh …` does the same without
+typing `uv run`, from any directory.
 
 Or drive it from Python:
 
@@ -76,13 +86,13 @@ budget = Budget(
 )
 
 with Workspace(root=Path("workspaces/click"), name="click", run_id=run_id, use_sandbox=True) as ws:
-    result = Agent(
-        ws=ws,
-        task="Where is IntRange validated?",
+    agent = Agent(
+        ws,
         model="claude-haiku-5-5",
         budget=budget,
-        trace=Trace.get_dummy_trace(run_id=run_id),
-    ).run()
+        trace=Trace.get_dummy_trace(run_id=run_id),  # optional: omit it to record nothing
+    )
+    result = agent.run("Where is IntRange validated?")
 
 print(result.status, result.final_response)
 ```

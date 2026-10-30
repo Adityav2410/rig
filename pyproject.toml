@@ -20,7 +20,15 @@ dependencies = [
     "httpx>=0.28.1",
     "pydantic>=2.14.1",
     "pyyaml>=6.0.2",
+    "typer>=0.27.3",
 ]
+
+[project.scripts]
+rig = "rig.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
