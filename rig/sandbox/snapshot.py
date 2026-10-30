@@ -7,9 +7,14 @@ def create_snapshot(
 ) -> Path:
     """Populate `dest` with a fresh, history-free checkout of `source_repo` at `ref`.
 
-    If `seed_patch` is given, it is applied to the plain files before any git history
-    exists, so the resulting single-commit repo cannot reveal the seeded bug via
-    `git log -p` or `git show`.
+    If `seed_patch` is given, it is applied before the one commit is made, so the resulting
+    repo cannot reveal the seeded bug via `git log -p` or `git show`.
+
+    `git init` comes before `git apply` on purpose. Run outside a repository of its own,
+    `git apply` works relative to whatever repository encloses `dest` (rig's own, since
+    snapshots live under runs/) and silently skips every path outside it while still
+    exiting 0. That dropped every seed from Week 1 on; the check after applying makes a
+    skipped seed an error instead.
     """
     dest.mkdir(parents=True)
 
@@ -18,10 +23,15 @@ def create_snapshot(
     )
     subprocess.run(["tar", "-x", "-C", str(dest)], input=archive.stdout, check=True)
 
-    if seed_patch is not None:
-        subprocess.run(["git", "apply", str(seed_patch.resolve())], cwd=dest, check=True)
-
     subprocess.run(["git", "init", "-q"], cwd=dest, check=True)
+    if seed_patch is not None:
+        patch = str(seed_patch.resolve())
+        subprocess.run(["git", "apply", patch], cwd=dest, check=True)
+        landed = subprocess.run(
+            ["git", "apply", "--check", "-R", patch], cwd=dest, capture_output=True
+        )
+        if landed.returncode != 0:
+            raise RuntimeError(f"seed {seed_patch.name} did not apply to the snapshot at {dest}")
     subprocess.run(["git", "add", "-A"], cwd=dest, check=True)
     subprocess.run(
         [

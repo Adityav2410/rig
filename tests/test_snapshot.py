@@ -35,3 +35,18 @@ def test_create_snapshot_applies_seed_patch_before_committing(tmp_path: Path) ->
     create_snapshot(source_repo=CLICK, ref="HEAD", dest=seeded, seed_patch=patch_path)
 
     assert (seeded / "CHANGES.md").read_text().startswith("seeded-bug-marker")
+
+
+def test_a_seed_lands_even_when_the_snapshot_is_inside_another_repo(tmp_path: Path) -> None:
+    # The eval harness puts snapshots under runs/, inside rig's own repository. A seed must
+    # still land there (it was silently dropped before), and T04's real seed is the proof.
+    outer = tmp_path / "outer"
+    outer.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=outer, check=True)
+    seed = Path("evals/seeds/T04.patch").resolve()
+
+    dest = create_snapshot(
+        source_repo=CLICK, ref="HEAD", dest=outer / "runs" / "snap", seed_patch=seed
+    )
+
+    assert "if total_length >= max_length:" in (dest / "src" / "click" / "utils.py").read_text()
