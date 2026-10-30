@@ -26,11 +26,16 @@ def _only_session(tmp_path: Path) -> SessionLog:
     return SessionLog(path)
 
 
+def _plain(output: str) -> str:
+    """Typer styles its error panels when it detects CI (GITHUB_ACTIONS); compare the text only."""
+    return re.sub(r"\x1b\[[0-9;]*m", "", output)
+
+
 def test_typos_and_missing_options_fail_with_a_message(tmp_path: Path) -> None:
     typo = runner.invoke(app, ["rnu"])
-    assert typo.exit_code == 2 and "No such command 'rnu'" in typo.output
+    assert typo.exit_code == 2 and "No such command 'rnu'" in _plain(typo.output)
     missing = runner.invoke(app, ["run"])
-    assert missing.exit_code == 2 and "Missing option '--task'" in missing.output
+    assert missing.exit_code == 2 and "Missing option '--task'" in _plain(missing.output)
 
 
 def test_run_streams_the_answer_and_writes_a_session(tmp_path: Path) -> None:
@@ -102,3 +107,11 @@ def test_only_flags_that_were_given_override_the_defaults(tmp_path: Path) -> Non
     s = settings(c, None, use_sandbox=None, provider=None, model="other", max_tokens=None)
     assert (s.repo, s.config.model, s.config.provider) == (tmp_path, "other", Config().provider)
     assert s.config.use_sandbox is False
+
+
+def test_a_relative_repo_is_resolved_against_the_cwd(tmp_path: Path) -> None:
+    (tmp_path / "proj" / "src").mkdir(parents=True)
+    (tmp_path / "proj" / "src" / "a.py").write_text("x = 1\n")
+    c = Ctx(cwd=tmp_path)
+    s = settings(c, Path("proj"), use_sandbox=None, provider=None, model=None, max_tokens=None)
+    assert s.repo == tmp_path / "proj"

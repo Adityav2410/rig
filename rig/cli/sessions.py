@@ -47,7 +47,7 @@ class _Settings:
 def settings(c: Ctx, repo: Path | None, **flags: Any) -> _Settings:
     """The flags actually given, over the layered config; the workspace defaults to the cwd."""
     loaded = load_config(c, flags)
-    return _Settings(repo or c.cwd, loaded.config)
+    return _Settings(c.cwd / repo if repo else c.cwd, loaded.config)  # relative to the cwd
 
 
 # --- sessions on disk ---

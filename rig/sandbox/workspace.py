@@ -22,7 +22,7 @@ _DOCKER_FLAGS = {
 
 class Workspace:
     def __init__(self, root: Path, name: str, run_id: str, use_sandbox: bool) -> None:
-        self.root = root
+        self.root = root.resolve()  # the path jail compares absolute paths
         self.name = name
         self._run_id = run_id
         self._container_name = f"rig-{self._run_id}"

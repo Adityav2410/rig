@@ -28,7 +28,12 @@ def run_tool(ws: Workspace, name: str, **kwargs: Any) -> tuple[str, bool]:
         error_msg, exc = f"Error executing tool: {name}. {e}", e
 
     if error_msg:
-        logger.error(error_msg, exc_info=exc)  # outside the except block, so pass exc itself
+        # Expected failures are results for the model, not crashes: log them quietly. Anything
+        # else is a bug in a tool, so it gets its traceback.
+        if isinstance(exc, (PathEscapesWorkspace, ToolError, TypeError)):
+            logger.debug(error_msg)
+        else:
+            logger.error(error_msg, exc_info=exc)
         return truncate(error_msg), True
     return truncate(out), False
 
