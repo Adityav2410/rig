@@ -4,9 +4,9 @@ from pathlib import Path
 from subprocess import run
 from time import sleep
 
-from .exceptions import SandboxError
-from .logging import get_logger
-from .sandbox_setup import IMAGE_NAME
+from ..core.exceptions import SandboxError
+from ..util.logging import get_logger
+from .setup import IMAGE_NAME
 
 logger = get_logger()
 

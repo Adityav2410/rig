@@ -136,7 +136,7 @@ You build one Python program, `rig`. It starts as a repository agent and grows i
 
 **Targets.** Weeks 1 to 3 use [pallets/click](https://github.com/pallets/click) at tag `8.5.0`: about 12,000 lines across 16 modules in `src/click`, and 1,991 tests that finish in roughly 8 seconds — pure Python, no native deps or network needed to install or test, so it runs offline in the sandbox and stays cheap to re-run the full suite after every fix, across every task, every week. It's real production code, not a toy example, but still small enough that you can verify a fix or a grader by hand. The same codebase and the same 12-task ladder carry across Weeks 1 to 3 unchanged, so a change in pass rate, steps or cost is attributable to your harness, not to a different target. Week 4 adds [openai/openai-agents-python](https://github.com/openai/openai-agents-python) at `v0.23.1` (320 source files), large enough that retrieval has something to beat; it is also Week 11 reading. From Week 10 the target is the open web, from Week 12 a fixture folder of CSVs and PDFs, and from Week 13 a fixture inbox and calendar, then one real account.
 
-**Layout as it grows.** Week 1's `rig/` package gains one directory per capability: `providers/` (W2), `context/` (W3), `retrieval/` (W4), `gateway/` (W8), `research/` (W10), `mcp/` and `policy/` (W9, the policy service runs as its own process), `artifacts/` and `ingest/` (W12), `memory/` and `connectors/` (W13), `server/` (W14), `durable/` and `scheduler/` (W15), `browser/` (W16), `voice/` (W17), `app/` (W18).
+**Layout as it grows.** Week 1's `rig/` package gains one directory per capability: `providers/`, `core/` (the loop, agent, session, config, budget, trace), `cli/` and `sandbox/` (W2), `context/` (W3), `retrieval/` (W4), `gateway/` (W8), `research/` (W10), `mcp/` and `policy/` (W9, the policy service runs as its own process), `artifacts/` and `ingest/` (W12), `memory/` and `connectors/` (W13), `server/` (W14), `durable/` and `scheduler/` (W15), `browser/` (W16), `voice/` (W17), `app/` (W18).
 
 **Invariants that hold from Day 1.**
 
@@ -951,13 +951,18 @@ rig/
     anthropic.py
     openai_chat.py  # OpenAI, OpenRouter, vLLM, Ollama: one wire format, different base_url
     fake.py
-  costs/            # add rates for the OpenAI and OpenRouter models you run
-  runtime.py
-  agent.py          # Week 1's loop.py, renamed: a thin stateful wrapper around runtime.run()
-  session.py
-  commands.py       # the rig subcommands, one Typer app
-  config.py         # defaults < ~/.config/rig/config.json < .rig/config.json < RIG_* env < flags
-  cli.py            # argv frontend; scripts/run_agent.py becomes its `run` command
+  core/             # the agent itself: Week 1's budget, trace and costs move in here
+    runtime.py
+    agent.py        # Week 1's loop.py, renamed: a thin stateful wrapper around runtime.run()
+    session.py
+    config.py       # defaults < ~/.config/rig/config.json < .rig/config.json < RIG_* env < flags
+    pricing.py      # Week 1's costs: add rates for the OpenAI and OpenRouter models you run
+  cli/              # the rig command line
+    app.py          # the root Typer app, one module per command group
+    sessions.py     # run, resume, fork, show; scripts/run_agent.py becomes `run`
+    config_cmd.py   # rig config get|set|unset|list
+    main.py         # entry point: Ctrl-C and typed lines
+  sandbox/          # Week 1's workspace.py, snapshot and Dockerfile
   tools/fs.py       # edit_file v2
   llm.py            # Week 1's raw client: kept for reference, no longer on the live path
 evals/tasks/week1.yaml   # T13–T16 appended here: one growing regression suite
@@ -965,6 +970,8 @@ evals/hidden/            # their hidden tests
 notes/week2-experiments.md
 tests/test_runtime.py, test_providers.py, test_abort.py, test_edit_file_v2.py, test_session.py, test_config.py
 ```
+
+rig passes a dozen modules this week, so group them by layer as pi does (`ai`, `agent`, `coding-agent`): the provider layer in `providers/`, the loop and everything with state in `core/`, the command line in `cli/`, and where code runs in `sandbox/`. Later weeks name a new file by its own name; put it in the folder of the layer it belongs to.
 
 **How it fits together.** One user prompt, end to end. Each layer only calls the one below it, and only through the names shown:
 

@@ -1,8 +1,8 @@
 from typing import Any
 
-from ..exceptions import PathEscapesWorkspace, ToolError
-from ..logging import get_logger
-from ..workspace import Workspace
+from ..core.exceptions import PathEscapesWorkspace, ToolError
+from ..sandbox.workspace import Workspace
+from ..util.logging import get_logger
 from . import _registry
 
 logger = get_logger()

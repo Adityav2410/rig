@@ -7,6 +7,8 @@ from typing import Any
 import pytest
 
 from rig import Agent, Budget, Workspace
+from rig.core.runtime import RuntimeTool
+from rig.core.session import SessionLog
 from rig.providers.fake import FakeProvider, text_turn, tool_turn
 from rig.providers.types import (
     AssistantMessage,
@@ -17,8 +19,6 @@ from rig.providers.types import (
     ToolSpec,
     UserMessage,
 )
-from rig.runtime import RuntimeTool
-from rig.session import SessionLog
 
 
 def _user(text: str) -> UserMessage:

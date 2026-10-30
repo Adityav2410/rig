@@ -12,7 +12,7 @@ from typing import Any
 
 from pydantic import TypeAdapter
 
-from .providers.types import Message
+from ..providers.types import Message
 
 # dict -> UserMessage | AssistantMessage | ToolResult, picked by the "role" tag
 MESSAGE: TypeAdapter[Message] = TypeAdapter(Message)

@@ -17,12 +17,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from . import runtime
-from .budget import Budget
-from .exceptions import BudgetExceededError, LLMError
-from .logging import get_logger
-from .providers import get_provider
-from .providers.types import (
+from ..providers import get_provider
+from ..providers.types import (
     AssistantMessage,
     Event,
     Message,
@@ -38,14 +34,18 @@ from .providers.types import (
     TurnStart,
     UserMessage,
 )
+from ..sandbox.workspace import Workspace
+from ..tools import get_tools, run_tool
+from ..util.logging import get_logger
+from . import runtime
+from .budget import Budget
+from .exceptions import BudgetExceededError, LLMError
 from .runtime import Hooks, RuntimeTool, ToolOutput
 from .session import SessionLog
-from .tools import get_tools, run_tool
 from .trace import NullTrace, Trace
-from .workspace import Workspace
 
 logger = get_logger()
-SYSTEM_PROMPT = Path(__file__).parent / "prompts" / "system_prompt.md"
+SYSTEM_PROMPT = Path(__file__).parent.parent / "prompts" / "system_prompt.md"
 
 
 @cache

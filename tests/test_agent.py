@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from rig import Agent, Budget, Trace, Workspace
-from rig.exceptions import LLMError
+from rig.core.exceptions import LLMError
 from rig.providers.fake import FakeProvider, text_turn, tool_turn
 from rig.providers.types import Context, Event
 

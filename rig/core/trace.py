@@ -5,7 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from .logging import get_logger
+from ..util.logging import get_logger
 
 logger = get_logger()
 

@@ -6,7 +6,7 @@ from typing import Any
 
 import anthropic
 
-from ..exceptions import LLMError
+from ..core.exceptions import LLMError
 from .types import (
     AssistantMessage,
     Context,

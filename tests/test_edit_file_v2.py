@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from rig import Workspace
-from rig.exceptions import ToolError
+from rig.core.exceptions import ToolError
 from rig.tools import run_tool
 from rig.tools.fs import edit_file
 

@@ -33,7 +33,7 @@ rig is read to be learned from, so where the logic is tricky, a function's docst
 - **Non-obvious choices and their alternatives:** why a lock is needed on top of `setdefault`, why a result list is returned instead of mutating the input.
 - **Inline comments say why a line exists**, never what it does: `# map() keeps submission order`, not `# map over calls`.
 
-Being private doesn't exempt a helper; helpers are often where the tricky logic lives. Being private doesn't earn a helper a docstring either: judge each one by its logic. `rig/runtime.py` (`run_tools`, `_close_orphans`) and `rig/providers/anthropic.py` are the reference examples.
+Being private doesn't exempt a helper; helpers are often where the tricky logic lives. Being private doesn't earn a helper a docstring either: judge each one by its logic. `rig/core/runtime.py` (`run_tools`, `_close_orphans`) and `rig/providers/anthropic.py` are the reference examples.
 
 ## Reporting a bug
 

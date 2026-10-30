@@ -10,9 +10,9 @@ from pathlib import Path
 from typing import Any
 
 from rig import Agent, Budget, Workspace
+from rig.core.runtime import ABORTED_MSG, RuntimeTool
 from rig.providers.fake import FakeProvider, text_turn, tool_turn
 from rig.providers.types import AssistantMessage, Event, Message, ToolCall, ToolResult, ToolSpec
-from rig.runtime import ABORTED_MSG, RuntimeTool
 
 
 def _tool(name: str, log: list[str], *, read_only: bool = True, action: Any = None) -> RuntimeTool:

@@ -24,7 +24,7 @@ dependencies = [
 ]
 
 [project.scripts]
-rig = "rig.cli:main"
+rig = "rig.cli.main:main"
 
 [build-system]
 requires = ["hatchling"]

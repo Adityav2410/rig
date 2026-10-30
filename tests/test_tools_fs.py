@@ -2,9 +2,9 @@ from pathlib import Path
 
 import pytest
 
-from rig.exceptions import PathEscapesWorkspace
+from rig.core.exceptions import PathEscapesWorkspace
+from rig.sandbox.workspace import Workspace
 from rig.tools.fs import resolve
-from rig.workspace import Workspace
 
 
 def _ws(tmp_path: Path) -> Workspace:

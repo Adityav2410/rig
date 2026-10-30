@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from rig import Agent, Budget, Workspace
-from rig.cli import _attach
+from rig.cli.main import _attach
 from rig.providers.fake import FakeProvider
 
 

@@ -14,7 +14,7 @@ from typing import Any
 import yaml
 
 from rig import Agent, Budget, Trace, Workspace
-from rig.snapshot import create_snapshot
+from rig.sandbox.snapshot import create_snapshot
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SOURCE_REPO = REPO_ROOT / "workspaces" / "click"

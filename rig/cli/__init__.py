@@ -1,0 +1,1 @@
+"""The `rig` command line."""

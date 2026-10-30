@@ -1,7 +1,7 @@
 import subprocess
 from pathlib import Path
 
-from rig.snapshot import create_snapshot
+from rig.sandbox.snapshot import create_snapshot
 
 CLICK = Path("workspaces/click")
 

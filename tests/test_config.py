@@ -10,9 +10,10 @@ from typing import Any
 import pytest
 from typer.testing import CliRunner
 
-from rig import agent as agent_module
-from rig import config
-from rig.commands import Ctx, app
+from rig.cli.app import app
+from rig.cli.common import Ctx
+from rig.core import agent as agent_module
+from rig.core import config
 from rig.providers.fake import FakeProvider, text_turn
 
 runner = CliRunner()

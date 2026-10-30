@@ -26,12 +26,11 @@ rig is meant to work with any capable model, not one vendor. From Week 2 it talk
 
 | Piece | Where | What it does |
 |---|---|---|
-| Agent loop | `rig/agent.py` | Sends the conversation, runs the tools the model asks for, appends the results, and repeats until the model stops |
-| Model client | `rig/llm.py` | One function, `call(request)`, with retries and backoff; the only network code (becomes `rig/providers/` in Week 2) |
+| Providers | `rig/providers/` | rig's own message and event types, and one adapter per model API; the only code that talks to the network |
+| Agent | `rig/core/` | The event loop (`runtime.py`), the stateful `Agent`, sessions, layered config, budget and trace |
 | Tools | `rig/tools/` | `list_files`, `read_file`, `edit_file`, `search`, and `bash`, each registered with a JSON schema |
-| Sandbox | `rig/workspace.py`, `rig/docker/` | Runs tool commands inside a throwaway Docker container; the API key never enters it |
-| Budget | `rig/budget.py` | Hard caps on steps, tokens, dollars, and wall-clock time |
-| Trace | `rig/trace.py` | Append-only JSONL log of every request, response, and tool call |
+| Sandbox | `rig/sandbox/` | The workspace, an optional throwaway Docker container for tool commands (the API key never enters it), and repo snapshots |
+| CLI | `rig/cli/` | The `rig` command: `run`, `resume`, `fork`, `show` and `config` |
 | Evals | `evals/` | A task ladder run against a pinned [click](https://github.com/pallets/click) checkout, with automatic grading |
 
 ## Quickstart

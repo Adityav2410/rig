@@ -1,4 +1,4 @@
-"""The `rig` command: the Typer app in commands.py, plus what only a terminal needs.
+"""The `rig` entry point: the Typer app (app.py), plus what only a terminal needs.
 
 The terminal-only parts live here: Ctrl-C and reading what you type while a run streams.
 """
@@ -8,8 +8,9 @@ import sys
 import threading
 from types import FrameType
 
-from .agent import Agent
-from .commands import Ctx, app
+from ..core.agent import Agent
+from .app import app
+from .common import Ctx
 
 
 def main() -> None:

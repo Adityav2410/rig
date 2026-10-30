@@ -3,8 +3,9 @@
 import time
 from typing import Any
 
-from rig import runtime
-from rig.budget import Budget
+from rig.core import runtime
+from rig.core.budget import Budget
+from rig.core.runtime import Deny, Hooks, RuntimeTool
 from rig.providers.fake import FakeProvider, text_turn, tool_turn
 from rig.providers.types import (
     AssistantMessage,
@@ -16,7 +17,6 @@ from rig.providers.types import (
     TurnEnd,
     UserMessage,
 )
-from rig.runtime import Deny, Hooks, RuntimeTool
 
 
 def _tool(
