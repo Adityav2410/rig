@@ -212,34 +212,38 @@ None of this week's ideas are specific to one vendor; only the exact field names
 | File | Its one job | Reference counterpart | Day |
 |---|---|---|---|
 | `notes/wire/01..04.json` | The four raw request and response bodies of one tool round trip, saved by hand | — | Mon |
-| `rig/llm.py` | The only code that talks to the network: one request in, one parsed response out, retrying only what's safe to retry | **Starter code** below; mini-swe-agent's [`retry.py`](https://github.com/SWE-agent/mini-swe-agent/blob/04d809ceab9df28f9adaed044884180159172930/src/minisweagent/models/utils/retry.py) | Tue |
-| `rig/trace.py` | Append-only event log, one flushed JSON line per event | **Trace structure** below | Tue |
-| `rig/budget.py` | The single place that decides when a run must stop | mini-swe-agent's [`query` limit checks](https://github.com/SWE-agent/mini-swe-agent/blob/04d809ceab9df28f9adaed044884180159172930/src/minisweagent/agents/default.py#L130-L152) | Tue (shape), Thu (real) |
-| `rig/loop.py` | `run_agent()`: owns `messages`; calls the model, runs tools, decides when to stop | mini-swe-agent's [`DefaultAgent.run`](https://github.com/SWE-agent/mini-swe-agent/blob/04d809ceab9df28f9adaed044884180159172930/src/minisweagent/agents/default.py#L88-L123) | Tue |
+| `rig/core/llm.py` | The only code that talks to the network: one request in, one parsed response out, retrying only what's safe to retry | **Starter code** below; mini-swe-agent's [`retry.py`](https://github.com/SWE-agent/mini-swe-agent/blob/04d809ceab9df28f9adaed044884180159172930/src/minisweagent/models/utils/retry.py) | Tue |
+| `rig/core/trace.py` | Append-only event log, one flushed JSON line per event | **Trace structure** below | Tue |
+| `rig/core/budget.py` | The single place that decides when a run must stop | mini-swe-agent's [`query` limit checks](https://github.com/SWE-agent/mini-swe-agent/blob/04d809ceab9df28f9adaed044884180159172930/src/minisweagent/agents/default.py#L130-L152) | Tue (shape), Thu (real) |
+| `rig/core/loop.py` | `run_agent()`: owns `messages`; calls the model, runs tools, decides when to stop | mini-swe-agent's [`DefaultAgent.run`](https://github.com/SWE-agent/mini-swe-agent/blob/04d809ceab9df28f9adaed044884180159172930/src/minisweagent/agents/default.py#L88-L123) | Tue |
 | `rig/tools/__init__.py` | Registry, dispatch, truncation: every failure becomes an `is_error` result | mini-swe-agent's [`parse_toolcall_actions`](https://github.com/SWE-agent/mini-swe-agent/blob/04d809ceab9df28f9adaed044884180159172930/src/minisweagent/models/utils/actions_toolcall.py#L30) | Tue |
 | `rig/tools/fs.py` | `list_files`, `read_file` (Tue), `edit_file` and the path jail (Thu) | **The first five tools** below | Tue, Thu |
-| `rig/workspace.py` | `ws`: the checkout root and name (Tue); the container lifecycle and `exec_prefix` (Wed) | mini-swe-agent's [`LocalEnvironment`](https://github.com/SWE-agent/mini-swe-agent/blob/04d809ceab9df28f9adaed044884180159172930/src/minisweagent/environments/local.py#L24) | Tue, Wed |
+| `rig/sandbox/workspace.py` | `ws`: the checkout root and name (Tue); the container lifecycle and `exec_prefix` (Wed) | mini-swe-agent's [`LocalEnvironment`](https://github.com/SWE-agent/mini-swe-agent/blob/04d809ceab9df28f9adaed044884180159172930/src/minisweagent/environments/local.py#L24) | Tue, Wed |
 | `rig/tools/search.py`, `rig/tools/shell.py` | `search` (ripgrep) and `bash`, both run inside the container | mini-swe-agent's [`_run`](https://github.com/SWE-agent/mini-swe-agent/blob/04d809ceab9df28f9adaed044884180159172930/src/minisweagent/environments/local.py#L72-L92) | Wed |
-| `docker/Dockerfile.sandbox` | The sandbox image | **Sandbox from Day 1** below | Wed |
+| `rig/sandbox/Dockerfile.sandbox` | The sandbox image | **Sandbox from Day 1** below | Wed |
 | `evals/run_evals.py` + `evals/tasks/week1.yaml` | Snapshot, seed, run, grade in the container, one line to `results.jsonl` | **Task ladder and initial eval set** below | Sat |
+
+Group the modules by layer from the first day: `core/` for the agent itself, `sandbox/` for where code runs, `tools/` for what the model can call. Later weeks then add folders (Week 2 adds `providers/` and `cli/`) instead of moving files.
 
 ```text
 rig/
   pyproject.toml            # deps: httpx, pyyaml, pytest (for rig's own tests)
   rig/
     cli.py                  # rig run --repo PATH --task FILE_OR_TEXT --budget-usd 0.50
-    llm.py                  # raw Messages API client: retries, backoff, usage
-    loop.py                 # run_agent(): the loop, stop conditions
-    budget.py               # steps / tokens / dollars / wall clock
-    trace.py                # append-only JSONL writer
-    workspace.py            # snapshot creation, container lifecycle, path jail
+    core/                   # the agent itself
+      llm.py                # raw Messages API client: retries, backoff, usage
+      loop.py               # run_agent(): the loop, stop conditions
+      budget.py             # steps / tokens / dollars / wall clock
+      trace.py              # append-only JSONL writer
+    sandbox/                # where code runs
+      workspace.py          # snapshot creation, container lifecycle, path jail
+      Dockerfile.sandbox
     tools/
       __init__.py           # registry, dispatch, truncation
       fs.py                 # list_files, read_file, edit_file
       search.py             # search (ripgrep)
       shell.py              # bash
     prompts/system.md
-  docker/Dockerfile.sandbox
   evals/
     tasks/week1.yaml        # id, prompt, seed, grader
     seeds/                  # one patch per seeded bug (never shown to the agent)
@@ -297,7 +301,7 @@ One process, one thread, no framework:
 | Mon | 1.5 h | A throwaway script, one tool, by hand — see the Monday walkthrough just below | One full tool round trip over raw `httpx`; the four JSON bodies saved under `notes/wire/` |
 | Tue | 2 h | `llm.py`, `trace.py`, `budget.py`'s shape, `loop.py`, `list_files`, `read_file`; clone click; run the first prompt | The agent answers the read-only trace task; `runs/<id>/trace.jsonl` holds one event per model call and tool call |
 | Wed | 2 h | `search`, `bash`, the sandbox container | The agent runs the test suite in the container and reports counts; `sleep 999` is killed at the timeout and the loop carries on |
-| Thu | 2 h | `edit_file`, `budget.py` for real, `max_tokens` handling, tool error paths; read mini-swe-agent | The agent fixes task T04 end to end; an artificially tiny budget ends the run with status `budget:*` |
+| Thu | 2 h | `edit_file`, `budget.py` for real, `max_tokens` handling, tool error paths; read mini-swe-agent | The agent fixes task T04 end to end; an artificially tiny budget ends the run with status `error.budget.*` |
 | Fri | 1.5 h | The four experiments on T04 to T09 | `notes/week1-experiments.md` comparing variants on the same tasks |
 | Sat | 3 to 4 h | `evals/run_evals.py`; run all 12 tasks 3 times | A baseline table: pass rate, mean steps, tokens and dollars per task |
 | Sun | 2 to 3 h | Read every failed trajectory; label failures; attempt the checkpoint | A failure taxonomy with counts; checkpoint passed or a redo list |
@@ -340,9 +344,9 @@ r2 = httpx.post(URL, headers=HEADERS, json=body).json()          # save body -> 
 **Why.** Grading a read-only answer against a known key proves the loop, the client and the trace are right before the agent is allowed to change a single file. Building `budget.py`'s interface now, even with limits that never trip, means `loop.py` won't change shape on Thursday.
 
 1. Lay out the repo as in the tree in **This week's objective and target layout** above.
-2. Write `rig/llm.py`: the raw HTTP client, and the only thing in the codebase that talks to the network. Its whole job is one request in, one parsed response out, retrying only the failures that are safe to retry — it knows nothing about tools, messages history, or the loop. See **Starter code** below for the exact retry policy — type it in, don't paste.
-3. Write `rig/trace.py`: the append-only event log every later week's metrics come from — one JSON line per model call and tool call, flushed immediately so a crash still leaves a readable prefix. Also put `rig/budget.py`'s shape in place: the single place that decides when a run has to stop (steps, tokens, dollars, wall clock). Both are sketched in **Starter code**. Field names follow **Trace structure** below.
-4. Write `rig/loop.py`: the agent itself. It owns the one `messages` list nothing else may append to, and on each turn decides whether to call the model again, run the tools it asked for, or stop — see **Starter code** below, and compare with mini-swe-agent's [`run`](https://github.com/SWE-agent/mini-swe-agent/blob/04d809ceab9df28f9adaed044884180159172930/src/minisweagent/agents/default.py#L88-L123), which is the same loop with exceptions instead of a stop-reason check.
+2. Write `rig/core/llm.py`: the raw HTTP client, and the only thing in the codebase that talks to the network. Its whole job is one request in, one parsed response out, retrying only the failures that are safe to retry — it knows nothing about tools, messages history, or the loop. See **Starter code** below for the exact retry policy — type it in, don't paste.
+3. Write `rig/core/trace.py`: the append-only event log every later week's metrics come from — one JSON line per model call and tool call, flushed immediately so a crash still leaves a readable prefix. Also put `rig/budget.py`'s shape in place: the single place that decides when a run has to stop (steps, tokens, dollars, wall clock). Both are sketched in **Starter code**. Field names follow **Trace structure** below.
+4. Write `rig/core/loop.py`: the agent itself. It owns the one `messages` list nothing else may append to, and on each turn decides whether to call the model again, run the tools it asked for, or stop — see **Starter code** below, and compare with mini-swe-agent's [`run`](https://github.com/SWE-agent/mini-swe-agent/blob/04d809ceab9df28f9adaed044884180159172930/src/minisweagent/agents/default.py#L88-L123), which is the same loop with exceptions instead of a stop-reason check.
 5. Write `rig/tools/__init__.py` from **Starter code** (the `@tool` registry, `run_tool`, `truncate`), then implement `list_files` (lets the model see what exists before it goes looking) and `read_file` (numbered lines, so it can cite a location precisely) from the contracts in **The first five tools** below.
 6. Write a minimal `workspace.py` from the Tuesday shape in **Starter code**: just `root` and `name`, so `loop.py` and the tools have a `ws`. Then `git -C reading/click archive 8.5.0` into `workspaces/` and point it there — a plain checkout, no sandbox yet.
 7. Run **The first prompt to give your agent** below, read-only, and grade yourself against the answer key given there.
@@ -376,12 +380,12 @@ Test: `test_tools_fs.py` gains the path jail — `resolve(ws, "../outside")` rai
 2. Finish `budget.py` for real: steps, input tokens, dollars and wall clock each raise `BudgetExceeded(<reason>)` from `check()`; fill in a price table from your provider's current pricing page for `charge()`. mini-swe-agent does the same checks in [`query`](https://github.com/SWE-agent/mini-swe-agent/blob/04d809ceab9df28f9adaed044884180159172930/src/minisweagent/agents/default.py#L130-L152), raising `LimitsExceeded` and `TimeExceeded` ([`exceptions.py`](https://github.com/SWE-agent/mini-swe-agent/blob/04d809ceab9df28f9adaed044884180159172930/src/minisweagent/exceptions.py)).
 3. Add `max_tokens` handling in `loop.py` (the `TRUNCATED` branch, already shown in **Starter code**) and confirm every tool failure becomes an `is_error` result rather than an exception that escapes (also shown there).
 4. Point the agent at task T04 end to end — fix, run tests, stop — see **Task ladder and initial eval set** below for the exact bug and grader.
-5. Set an artificially tiny budget (for example `max_steps=2`) and confirm the run ends with status `budget:steps`, not an exception.
+5. Set an artificially tiny budget (for example `max_steps=2`) and confirm the run ends with status `error.budget.steps`, not an exception.
 6. Read **Read: mini-swe-agent** below and trace the path given there; answer its seven questions in your notes.
 
-Tests: `test_edit_file.py` — an `old_text` matching twice raises and leaves the file unchanged; empty `old_text` creates a file but refuses to overwrite one. `test_loop.py` with a scripted fake standing in for `llm.call` — a `max_tokens` response with a tool call runs no tool and sends `TRUNCATED` back; a tool that raises becomes an `is_error` result; `max_steps=2` ends with status `budget:steps`.
+Tests: `test_edit_file.py` — an `old_text` matching twice raises and leaves the file unchanged; empty `old_text` creates a file but refuses to overwrite one. `test_loop.py` with a scripted fake standing in for `llm.call` — a `max_tokens` response with a tool call runs no tool and sends `TRUNCATED` back; a tool that raises becomes an `is_error` result; `max_steps=2` ends with status `error.budget.steps`.
 
-**Done when:** T04 passes its grader on a live run, and the tiny-budget run ends with status `budget:steps`.
+**Done when:** T04 passes its grader on a live run, and the tiny-budget run ends with status `error.budget.steps`.
 
 ### Friday — break your own agent on purpose.
 **Goal.** Numbers on which of this week's design choices actually mattered.
@@ -405,14 +409,16 @@ Run the four experiments in **Experiments (Friday)** below against T04 to T09 (e
 ```python
 for task in load_tasks("evals/tasks/week1.yaml"):
     for rep in range(args.runs):
-        snap = create_snapshot("reading/click", "8.5.0", seed=task.seed)   # archive -> patch -> git init
+        snap = create_snapshot("reading/click", "8.5.0", seed=task.seed)   # archive -> git init -> patch -> commit
         with Workspace(snap, ...) as ws:
             result = run_agent(task.prompt, ws=ws, ...)
             verdict = grade(task, result, ws)                            # inside the same container
         append_jsonl("results.jsonl", {"task": task.id, "rep": rep, **verdict, **result.totals})
 ```
 
-Test: `test_snapshot.py` — a snapshot has exactly one commit, and a seed patch is applied before that commit.
+Run `git init` before `git apply`, never after: snapshots live under `runs/`, inside rig's own repository, and a `git apply` run there works relative to rig's root, silently skips every path in the snapshot, and still exits 0. Then check the seed actually landed (`git apply --check -R` succeeds) and fail if not; otherwise every seeded task runs on a clean tree and "passes" with an empty diff.
+
+Test: `test_snapshot.py` — a snapshot has exactly one commit, and a seed patch is applied before that commit, including when the snapshot is created inside another git repository.
 
 **Done when:** `python evals/run_evals.py --runs 3` produces 36 lines in `results.jsonl`, and `report.py` prints pass@1 and pass^3 per task.
 
@@ -430,7 +436,7 @@ Test: `test_snapshot.py` — a snapshot has exactly one commit, and a seed patch
 ## Starter code
 The code below ran against click `8.5.0` with a scripted fake model standing in for `llm.call`: tool pairing, unknown tools, `max_tokens` truncation, the path jail, ambiguous edits, command timeouts and budget exhaustion all behaved as described. Type it in yourself rather than pasting it; the point is to own every line.
 
-`rig/llm.py`, a raw client with the retry policy the official SDK uses. Shown against Anthropic's endpoint — on OpenAI, swap `API_URL` for `https://api.openai.com/v1/responses` (or `/v1/chat/completions`) and the header for `"Authorization": f"Bearer {os.environ['OPENAI_API_KEY']}"`; the retry/backoff logic below is otherwise identical:
+`rig/core/llm.py`, a raw client with the retry policy the official SDK uses. Shown against Anthropic's endpoint — on OpenAI, swap `API_URL` for `https://api.openai.com/v1/responses` (or `/v1/chat/completions`) and the header for `"Authorization": f"Bearer {os.environ['OPENAI_API_KEY']}"`; the retry/backoff logic below is otherwise identical:
 
 ```python
 import os, random, time
@@ -439,12 +445,15 @@ import httpx
 API_URL = "https://api.anthropic.com/v1/messages"
 RETRYABLE = {408, 409, 429, 500, 502, 503, 504, 529}
 
-class LLMError(Exception): ...
+class LLMError(Exception):
+    def __init__(self, message: str, status: str = "connection"):
+        super().__init__(message)
+        self.status = status  # an HTTP status ("429"), or "connection": the run's error.llm.<cause>
 
 def call(body: dict, *, timeout: float = 300.0, max_retries: int = 5) -> tuple[dict, dict]:
     headers = {"x-api-key": os.environ["ANTHROPIC_API_KEY"],
                "anthropic-version": "2023-06-01", "content-type": "application/json"}
-    last_error = ""
+    last_error, last_status = "", "connection"
     for attempt in range(max_retries + 1):
         started, wait = time.monotonic(), None
         try:
@@ -456,23 +465,23 @@ def call(body: dict, *, timeout: float = 300.0, max_retries: int = 5) -> tuple[d
                 return r.json(), {"attempts": attempt + 1,
                                   "latency_s": round(time.monotonic() - started, 3),
                                   "request_id": r.headers.get("request-id")}
-            last_error = f"HTTP {r.status_code}: {r.text[:300]}"
+            last_error, last_status = f"HTTP {r.status_code}: {r.text[:300]}", str(r.status_code)
             hint = r.headers.get("x-should-retry")
             if hint == "false" or (r.status_code not in RETRYABLE and hint != "true"):
-                raise LLMError(last_error)  # a 400 is your bug; retrying will not fix it
+                raise LLMError(last_error, last_status)  # a 400 is your bug; retrying won't fix it
             try:
                 wait = float(r.headers.get("retry-after", ""))
             except ValueError:
                 pass
         if attempt < max_retries:
             time.sleep(wait if wait is not None else min(60.0, 2 ** attempt) * random.uniform(0.5, 1.5))
-    raise LLMError(f"gave up after {max_retries + 1} attempts: {last_error}")
+    raise LLMError(f"gave up after {max_retries + 1} attempts: {last_error}", last_status)
 ```
 
-`rig/workspace.py`, Tuesday's shape: the object every tool function and `loop.py` call `ws`, passed in rather than reached for as global state. Today it's nothing but the checkout — `root` for the path jail every file tool checks against, `name` to fill the system prompt's `{repo}` — with `exec_prefix` arriving Wednesday once there's a container to exec into:
+`rig/sandbox/workspace.py`, Tuesday's shape: the object every tool function and `loop.py` call `ws`, passed in rather than reached for as global state. Today it's nothing but the checkout — `root` for the path jail every file tool checks against, `name` to fill the system prompt's `{repo}` — with `exec_prefix` arriving Wednesday once there's a container to exec into:
 
 ```python
-# rig/workspace.py (Tuesday — step 6)
+# rig/sandbox/workspace.py (Tuesday — step 6)
 from pathlib import Path
 
 class Workspace:
@@ -481,7 +490,7 @@ class Workspace:
         self.name = name   # repo's display name, interpolated into the system prompt as {repo}
 ```
 
-`rig/loop.py`, the whole agent. The `ws` argument `run_agent` takes, and forwards into every tool call via `run_tool`, is the `Workspace` built just above:
+`rig/core/loop.py`, the whole agent. The `ws` argument `run_agent` takes, and forwards into every tool call via `run_tool`, is the `Workspace` built just above:
 
 ```python
 import time
@@ -491,7 +500,7 @@ from rig.budget import Budget, BudgetExceeded
 from rig.tools import TOOLS, run_tool
 import rig.tools.fs, rig.tools.search, rig.tools.shell  # noqa: F401  (registers the tools)
 
-SYSTEM = (Path(__file__).parent / "prompts" / "system.md").read_text()
+SYSTEM = (Path(__file__).parent.parent / "prompts" / "system.md").read_text()
 TRUNCATED = ("Not executed: your response hit max_tokens, so these arguments may be "
              "truncated. Re-issue the call with complete arguments.")
 
@@ -499,7 +508,7 @@ def run_agent(task: str, *, ws, model: str, budget: Budget, trace, max_tokens: i
     messages = [{"role": "user", "content": task}]
     schemas = [t.schema for t in TOOLS.values()]
     trace.event("run.start", task=task, model=model, tools=list(TOOLS))
-    status = "unknown"
+    status = "error.internal"
     try:
         while True:
             budget.check()  # raises BudgetExceeded("steps" | "input_tokens" | "usd" | "wall_clock")
@@ -512,8 +521,9 @@ def run_agent(task: str, *, ws, model: str, budget: Budget, trace, max_tokens: i
             messages.append({"role": "assistant", "content": resp["content"]})
 
             calls = [b for b in resp["content"] if b["type"] == "tool_use"]
-            if not calls:
-                status = resp["stop_reason"]  # end_turn, max_tokens, refusal, ...
+            if not calls:  # an answer, or a turn that ended without one
+                stop = resp["stop_reason"]  # end_turn, max_tokens (answer cut off), refusal, ...
+                status = "success" if stop == "end_turn" else f"stopped.{stop}"
                 break
 
             results = []  # one tool_result per tool_use id, or the next request is rejected
@@ -531,10 +541,10 @@ def run_agent(task: str, *, ws, model: str, budget: Budget, trace, max_tokens: i
                                 "content": out, "is_error": is_error})
             messages.append({"role": "user", "content": results})
     except BudgetExceeded as e:
-        status = f"budget:{e}"
+        status = f"error.budget.{e}"  # error.budget.steps, error.budget.usd, ...
     except llm.LLMError as e:
-        status = "llm_error"
-        trace.event("error", where="llm", message=str(e))
+        status = f"error.llm.{e.status}"  # error.llm.429, error.llm.connection, ...
+        trace.event("error", where="llm", status=status, message=str(e))
     last = messages[-1]
     final = "".join(b["text"] for b in last["content"] if b.get("type") == "text") \
         if last["role"] == "assistant" else ""
@@ -544,10 +554,10 @@ def run_agent(task: str, *, ws, model: str, budget: Budget, trace, max_tokens: i
 
 The shapes above (`resp["stop_reason"]`, `body["system"]`, a `tool_use` block's `id`/`name`/`input`, a `tool_result` keyed by `tool_use_id`) are Anthropic's field names — use the table in Concepts to translate if you're on OpenAI: read `resp["choices"][0]["finish_reason"]` instead of `stop_reason`, put system text in a `developer`-role message instead of a top-level `system` key, read each tool call from `resp["choices"][0]["message"]["tool_calls"]` (`id`, `function.name`, `function.arguments` as a JSON string you parse), and append the result as `{"role": "tool", "tool_call_id": c["id"], "content": out}` instead of a `tool_result` block. The control flow — collect calls, run them, append results, loop until none remain — is identical either way.
 
-`rig/trace.py` and `rig/budget.py`, the two accounting modules `loop.py` above already calls into. Deliberately simple — no engineering surprises here, just get the shape right so `loop.py` doesn't change later, then fill in `check()`'s thresholds and `charge()`'s price table yourself:
+`rig/core/trace.py` and `rig/core/budget.py`, the two accounting modules `loop.py` above already calls into. Deliberately simple — no engineering surprises here, just get the shape right so `loop.py` doesn't change later, then fill in `check()`'s thresholds and `charge()`'s price table yourself:
 
 ```python
-# rig/trace.py
+# rig/core/trace.py
 import itertools, json, time
 
 class Trace:
@@ -559,7 +569,7 @@ class Trace:
         self.f.write(json.dumps(rec) + "\n")
         self.f.flush()  # one line per event: a crash still leaves a readable prefix
 
-# rig/budget.py
+# rig/core/budget.py
 import time
 from dataclasses import dataclass, field
 
@@ -591,7 +601,7 @@ class Budget:
         return {"steps": self.steps, "input_tokens": self.input_tokens, "usd": round(self.usd, 4)}
 ```
 
-On Tuesday, `check()` tripping is fine to leave untested (your limits are generous); Thursday is when you set them tight enough to actually trip and confirm `status` comes back as `budget:steps` or similar, not an unhandled exception.
+On Tuesday, `check()` tripping is fine to leave untested (your limits are generous); Thursday is when you set them tight enough to actually trip and confirm `status` comes back as `error.budget.steps` or similar, not an unhandled exception.
 
 `rig/tools/__init__.py`, registry and dispatch. Every failure becomes an `is_error` result, never an exception that escapes the loop:
 
@@ -640,10 +650,10 @@ def truncate(s: str) -> str:
 
 *Reader variation:* the raw dicts above are the fastest way to see the wire shape, but if you'd rather have typed, validated tool schemas, defining `ToolPropertySchema`/`ToolInputSchema`/`Tool` as small Pydantic models works just as well — dump one with `.model_dump(exclude=["func"])` to get the same JSON shape `tools` expects on the wire. Either representation satisfies the rest of this week's contracts; pick whichever you'll trust yourself to keep correct as the tool count grows.
 
-`rig/workspace.py`, Wednesday's addition: once the sandbox container exists, `exec_prefix` is the argv prefix that turns any command into a command run inside this run's container, built once in the constructor from the container's name:
+`rig/sandbox/workspace.py`, Wednesday's addition: once the sandbox container exists, `exec_prefix` is the argv prefix that turns any command into a command run inside this run's container, built once in the constructor from the container's name:
 
 ```python
-# rig/workspace.py (Wednesday — adds the container)
+# rig/sandbox/workspace.py (Wednesday — adds the container)
 class Workspace:
     def __init__(self, root: Path, name: str, run_id: str):
         self.root = root
@@ -719,7 +729,7 @@ def bash(ws, command, timeout_s=120):
 The offline install step below was verified against click `8.5.0`. Without `--no-build-isolation`, pip tries to download the build backend and fails on a network-less container.
 
 ```dockerfile
-# docker/Dockerfile.sandbox
+# rig/sandbox/Dockerfile.sandbox
 FROM python:3.13-slim
 RUN apt-get update && apt-get install -y --no-install-recommends git ripgrep \
     && rm -rf /var/lib/apt/lists/*
@@ -886,7 +896,7 @@ Open these first, in this order (pinned to commit `04d809c`):
 - **Timeouts at two layers:** the HTTP client (300 s) and the tool (inside the container, plus a host-side backstop). A missing inner timeout leaves orphaned processes.
 - **Retries only where safe.** Model calls are retried because they have no side effects, even though a timed-out request may still be billed. Tool calls are never retried by the harness; the model decides, because the harness cannot know whether `bash` mutated state.
 - **Rate limits.** Honour `retry-after` on 429 and 529. Jittered exponential backoff stops parallel eval runs from retrying in lockstep.
-- **Budgets as statuses.** `budget:usd` is a result you count, not a crash.
+- **Budgets as statuses.** `error.budget.usd` is a result you count, not a crash.
 - **Secrets.** The container gets no host environment. The API key never enters the sandbox; Week 9 makes that a tested property.
 - **Permissions.** The path jail plus `--network none` are your Week 1 permission model. Write down what they do not cover (CPU time, disk fill, reading other files in the bind mount).
 
@@ -951,7 +961,7 @@ rig/
     anthropic.py
     openai_chat.py  # OpenAI, OpenRouter, vLLM, Ollama: one wire format, different base_url
     fake.py
-  core/             # the agent itself: Week 1's budget, trace and costs move in here
+  core/             # Week 1's agent layer: loop.py becomes agent.py; runtime, session, config are new
     runtime.py
     agent.py        # Week 1's loop.py, renamed: a thin stateful wrapper around runtime.run()
     session.py
@@ -962,7 +972,7 @@ rig/
     sessions.py     # run, resume, fork, show; scripts/run_agent.py becomes `run`
     config_cmd.py   # rig config get|set|unset|list
     main.py         # entry point: Ctrl-C and typed lines
-  sandbox/          # Week 1's workspace.py, snapshot and Dockerfile
+  sandbox/          # unchanged from Week 1: workspace, snapshot, Dockerfile
   tools/fs.py       # edit_file v2
   llm.py            # Week 1's raw client: kept for reference, no longer on the live path
 evals/tasks/week1.yaml   # T13–T16 appended here: one growing regression suite
@@ -971,7 +981,7 @@ notes/week2-experiments.md
 tests/test_runtime.py, test_providers.py, test_abort.py, test_edit_file_v2.py, test_session.py, test_config.py
 ```
 
-rig passes a dozen modules this week, so group them by layer as pi does (`ai`, `agent`, `coding-agent`): the provider layer in `providers/`, the loop and everything with state in `core/`, the command line in `cli/`, and where code runs in `sandbox/`. Later weeks name a new file by its own name; put it in the folder of the layer it belongs to.
+Keep the layers Week 1 started and add two, as pi splits `ai`, `agent` and `coding-agent`: the provider layer in `providers/` and the command line in `cli/`, beside `core/` (the loop and everything with state) and `sandbox/` (where code runs). Later weeks name a new file by its own name; put it in the folder of the layer it belongs to.
 
 **How it fits together.** One user prompt, end to end. Each layer only calls the one below it, and only through the names shown:
 
