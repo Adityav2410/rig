@@ -113,7 +113,7 @@ print(result.status, result.final_response)
 ```bash
 uv run python evals/run_evals.py --runs 3            # the whole ladder, three runs per task
 uv run python evals/run_evals.py --task-id T04       # a single task
-uv run python scripts/parse_trace.py traces/<run>.jsonl
+uv run python scripts/parse_trace.py runs/<run_id>/trace.jsonl   # an eval run; no argument: the newest .rig/traces/ file
 ```
 
 Tasks live in `evals/tasks/`, seeded bugs in `evals/seeds/`, and hidden grader tests in `evals/hidden/`. Results are appended to `evals/results.jsonl`. Eval runs call the API and cost money.

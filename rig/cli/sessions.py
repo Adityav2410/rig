@@ -109,7 +109,7 @@ def _run(c: Ctx, o: _Settings, session: SessionLog, task: str | None) -> None:
         result = agent.run(task, on_event=_render)
     typer.echo(
         f"\n\n[{result.status}] session {session_id}. "
-        f'Resume session with `rig resume {session_id} --task: "..."`'
+        f'Resume it with `rig resume {session_id} --task "..."`'
     )
     if result.status != "success":
         if result.final_response:

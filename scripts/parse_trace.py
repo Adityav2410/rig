@@ -2,11 +2,11 @@
 """Pretty-print a rig trace.jsonl file for human reading.
 
 Events are sorted by timestamp and grouped into "==== Step: N ====" blocks (events
-with no step field, e.g. agent.run.start, get their own "-" block), seq-ascending
+with no step field get their own "-" block), seq-ascending
 within each block.
 
 Usage:
-    python scripts/parse_trace.py                      # newest file in traces/
+    python scripts/parse_trace.py                      # newest file in .rig/traces/
     python scripts/parse_trace.py traces/<run>.jsonl
     python scripts/parse_trace.py traces/<run>.jsonl --out notes/trace.txt
     python scripts/parse_trace.py traces/<run>.jsonl --kind tool.result  # substring match
@@ -16,9 +16,11 @@ Usage:
 import argparse
 import json
 import sys
+from collections.abc import Iterator
 from contextlib import ExitStack
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -26,37 +28,37 @@ DEFAULT_MAX_CHARS = 240
 
 # Tolerates both shapes this project has used for a trace line:
 #   - the week-1 sketch: {"event": kind, "run_id", "seq", "ts", **fields}
-#   - what rig/trace.py actually writes: {"kind", "run_id", "seq", "ts", "fields": {...}}
+#   - what rig/core/trace.py writes: {"kind", "run_id", "seq", "ts", "fields": {...}}
 _ENVELOPE_KEYS = {"kind", "event", "run_id", "seq", "ts", "fields"}
 
 
-def truncate(value, max_chars: int) -> str:
+def truncate(value: Any, max_chars: int) -> str:
     text = str(value)
     if len(text) <= max_chars:
         return text
     return f"{text[:max_chars]}… (+{len(text) - max_chars} chars)"
 
 
-def as_json(value, max_chars: int) -> str:
+def as_json(value: Any, max_chars: int) -> str:
     text = value if isinstance(value, str) else json.dumps(value)
     text = text.replace("\n", "\\n")  # keep every value a scannable one-liner
     return truncate(text, max_chars)
 
 
-def fmt_ts(rec: dict) -> str:
+def fmt_ts(rec: dict[str, Any]) -> str:
     if "ts" not in rec:
         return "?"
     return datetime.fromtimestamp(rec["ts"], tz=UTC).strftime("%H:%M:%S.%f")[:-3]
 
 
-def event_fields(rec: dict) -> tuple[str, dict]:
+def event_fields(rec: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     kind = rec.get("kind") or rec.get("event") or "?"
     if "fields" in rec:
         return kind, rec["fields"]
     return kind, {k: v for k, v in rec.items() if k not in _ENVELOPE_KEYS}
 
 
-def summarize_block(block: dict, max_chars: int) -> str:
+def summarize_block(block: dict[str, Any], max_chars: int) -> str:
     btype = block.get("type")
     if btype == "text":
         return f"text: {truncate(block.get('text', ''), max_chars)!r}"
@@ -73,7 +75,7 @@ def summarize_block(block: dict, max_chars: int) -> str:
     return f"{btype}: {as_json(block, max_chars)}"
 
 
-def summarize_content(content, max_chars: int) -> list[str]:
+def summarize_content(content: Any, max_chars: int) -> list[str]:
     if isinstance(content, str):
         return [as_json(content, max_chars)]
     if isinstance(content, list):
@@ -81,11 +83,11 @@ def summarize_content(content, max_chars: int) -> list[str]:
     return [as_json(content, max_chars)]
 
 
-def is_message(value) -> bool:
+def is_message(value: Any) -> bool:
     return isinstance(value, dict) and "role" in value and "content" in value
 
 
-def is_block_list(value) -> bool:
+def is_block_list(value: Any) -> bool:
     return (
         isinstance(value, list)
         and bool(value)
@@ -93,7 +95,7 @@ def is_block_list(value) -> bool:
     )
 
 
-def format_field(key: str, value, max_chars: int) -> list[str]:
+def format_field(key: str, value: Any, max_chars: int) -> list[str]:
     # Known "rich" shapes get pretty-printed; anything else is printed as-is rather
     # than skipped, so a field this script has never seen still shows up.
     if is_message(value):
@@ -107,7 +109,7 @@ def format_field(key: str, value, max_chars: int) -> list[str]:
     return [f"       {key}: {as_json(value, max_chars)}"]
 
 
-def format_event(idx: int, rec: dict, max_chars: int) -> str:
+def format_event(idx: int, rec: dict[str, Any], max_chars: int) -> str:
     kind, fields = event_fields(rec)
     run_id = str(rec.get("run_id", "?"))[:8]
     lines = [f"[{idx:04d}] seq={rec.get('seq', '?'):<4} t={fmt_ts(rec):<15} run={run_id}  {kind}"]
@@ -116,12 +118,12 @@ def format_event(idx: int, rec: dict, max_chars: int) -> str:
     return "\n".join(lines)
 
 
-def step_of(rec: dict) -> int | None:
+def step_of(rec: dict[str, Any]) -> int | None:
     _, fields = event_fields(rec)
     return fields.get("step")
 
 
-def step_header(step) -> str:
+def step_header(step: int | None) -> str:
     return f"==== Step: {step if step is not None else '-'} ===="
 
 
@@ -129,7 +131,7 @@ def indent(text: str, prefix: str = "    ") -> str:
     return "\n".join(prefix + line for line in text.splitlines())
 
 
-def iter_records(path: Path):
+def iter_records(path: Path) -> Iterator[tuple[int, dict[str, Any]]]:
     fh = sys.stdin if str(path) == "-" else path.open()
     with fh:
         for lineno, line in enumerate(fh, start=1):
@@ -155,7 +157,9 @@ def main() -> None:
     )
     parser.add_argument("trace", nargs="?", help="path to a trace .jsonl file, or '-' for stdin")
     parser.add_argument(
-        "--dir", default="traces", help="dir to pick the newest .jsonl from (default: traces/)"
+        "--dir",
+        default=".rig/traces",
+        help="dir to pick the newest .jsonl from (default: .rig/traces/, where rig run writes)",
     )
     parser.add_argument("--out", help="write output to this file instead of stdout")
     parser.add_argument(
