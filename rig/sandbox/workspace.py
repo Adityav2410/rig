@@ -4,9 +4,9 @@ from pathlib import Path
 from subprocess import run
 from time import sleep
 
-from .exceptions import SandboxError
-from .logging import get_logger
-from .sandbox_setup import IMAGE_NAME
+from ..core.exceptions import SandboxError
+from ..util.logging import get_logger
+from .setup import IMAGE_NAME
 
 logger = get_logger()
 
@@ -22,7 +22,7 @@ _DOCKER_FLAGS = {
 
 class Workspace:
     def __init__(self, root: Path, name: str, run_id: str, use_sandbox: bool) -> None:
-        self.root = root
+        self.root = root.resolve()  # the path jail compares absolute paths
         self.name = name
         self._run_id = run_id
         self._container_name = f"rig-{self._run_id}"

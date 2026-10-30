@@ -13,7 +13,7 @@ from typing import Any
 import yaml
 
 from rig import Agent, Budget, Trace, Workspace
-from rig.snapshot import create_snapshot
+from rig.sandbox.snapshot import create_snapshot
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SOURCE_REPO = REPO_ROOT / "workspaces" / "click"
@@ -124,8 +124,8 @@ def run_one(task: dict[str, Any], repeat: int, model: str, ref: str, results_pat
     status = "error"
     final_response = ""
     with ws:
-        agent = Agent(ws=ws, task=task["prompt"], model=model, budget=budget, trace=trace)
-        result = agent.run()
+        agent = Agent(ws, model=model, budget=budget, trace=trace)
+        result = agent.run(task["prompt"])
         status = result.status
         final_response = result.final_response
 

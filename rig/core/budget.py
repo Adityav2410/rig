@@ -1,8 +1,8 @@
 import time
 from dataclasses import dataclass, field
 
-from .costs.cost_provider import price
 from .exceptions import BudgetExceededError
+from .pricing import price
 
 
 @dataclass

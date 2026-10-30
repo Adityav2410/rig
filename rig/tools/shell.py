@@ -1,9 +1,9 @@
 import platform
 import subprocess
 
-from ..exceptions import ToolError
-from ..logging import get_logger
-from ..workspace import Workspace
+from ..core.exceptions import ToolError
+from ..sandbox.workspace import Workspace
+from ..util.logging import get_logger
 from . import tool
 from .schema import ToolInputSchema, ToolPropertySchema, ToolPropertyType
 

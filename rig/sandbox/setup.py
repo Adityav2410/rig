@@ -2,13 +2,13 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from .exceptions import SandboxUnavailable
-from .logging import get_logger
+from ..core.exceptions import SandboxUnavailable
+from ..util.logging import get_logger
 
 logger = get_logger()
 
 IMAGE_NAME = "rig-sandbox:v0.1"
-DOCKERFILE = "docker/Dockerfile.sandbox"
+DOCKERFILE = "Dockerfile.sandbox"  # next to this file
 
 
 def ensure_sandbox_ready() -> None:

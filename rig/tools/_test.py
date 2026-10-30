@@ -1,7 +1,7 @@
 import json
 import logging
 
-from ..workspace import Workspace
+from ..sandbox.workspace import Workspace
 from . import get_tool_names, get_tools, run_tool
 
 logging.basicConfig(level=logging.DEBUG)

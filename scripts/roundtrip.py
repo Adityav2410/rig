@@ -1,20 +1,20 @@
+"""Week 1, Monday: one tool call by hand over raw HTTP, before rig has any modules.
+
+The model is asked to count the lines of AGENTS.md, calls the `file_line_counter` tool, gets
+the result back, and answers. Needs ANTHROPIC_API_KEY; makes two billable requests.
+"""
+
 import json
 import os
+from typing import Any
 
 import httpx
 
-
-def count_lines(filepath: str) -> int:
-    """Count the number of lines in a file."""
-    with open(filepath) as file:
-        return sum(1 for _ in file)
-
-
 ANTHROPIC_MESSAGES_ENDPOINT = "https://api.anthropic.com/v1/messages"
 
-FILEPATH = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../AGENTS.md"))  # noqa
+FILEPATH = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "../AGENTS.md"))
 
-MESSAGES = []
+MESSAGES: list[dict[str, Any]] = []
 
 TOOLS = [
     {
@@ -34,14 +34,7 @@ TOOLS = [
     }
 ]
 
-_DEFAULT_REQUEST_PAYLOAD = {
-    "max_tokens": 1000,
-    "messages": MESSAGES,
-    "model": "claude-haiku-5-5",
-    "tools": TOOLS,
-}
-
-REQUEST_PAYLOAD = {
+REQUEST_PAYLOAD: dict[str, Any] = {
     "max_tokens": 1000,
     "messages": MESSAGES,
     "model": "claude-haiku-5-5",
@@ -49,83 +42,84 @@ REQUEST_PAYLOAD = {
 }
 
 
-def call_anthropic_api():
+def count_lines(filepath: str) -> int:
+    """Count the number of lines in a file."""
+    with open(filepath) as file:
+        return sum(1 for _ in file)
+
+
+def call_anthropic_api() -> dict[str, Any]:
     r = httpx.post(
         url=ANTHROPIC_MESSAGES_ENDPOINT,
         headers={
             "Content-Type": "application/json",
-            "x-api-key": os.environ.get("ANTHROPIC_API_KEY"),
+            "x-api-key": os.environ["ANTHROPIC_API_KEY"],
             "anthropic-version": "2023-06-01",
         },
-        json=_DEFAULT_REQUEST_PAYLOAD,
+        json=REQUEST_PAYLOAD,
     )
 
     print(
         f"Request sent to {ANTHROPIC_MESSAGES_ENDPOINT} with payload: "
-        f"{json.dumps(_DEFAULT_REQUEST_PAYLOAD, indent=4)}"
+        f"{json.dumps(REQUEST_PAYLOAD, indent=4)}"
     )
 
     if r.status_code != 200:
         raise ValueError(f"Error: {r.status_code} - {r.text}")
 
-    print(f"\n\nResponse received: {json.dumps(r.json(), indent=4)}\n\n")
+    body: dict[str, Any] = r.json()
+    print(f"\n\nResponse received: {json.dumps(body, indent=4)}\n\n")
+    MESSAGES.append({"role": "assistant", "content": body["content"]})
+    return body
 
-    MESSAGES.append({"role": "assistant", "content": r.json()["content"]})
 
-    return r.json()
-
-
-def handle_file_line_counter_tool_use(tool_use_block):
-    tool_input = tool_use_block["input"]
-    file_path = tool_input.get("file_path")
-    if file_path:
-        line_count = count_lines(file_path)
-        print(f"Number of lines in file '{file_path}': {line_count}")
-        MESSAGES.append(
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": tool_use_block["id"],
-                        "content": f"{line_count}",
-                    }
-                ],
-            }
-        )
-    else:
+def handle_file_line_counter_tool_use(tool_use_block: dict[str, Any]) -> None:
+    file_path = tool_use_block["input"].get("file_path")
+    if not file_path:
         print("No file path provided for line counting.")
+        return
+    line_count = count_lines(file_path)
+    print(f"Number of lines in file '{file_path}': {line_count}")
+    MESSAGES.append(
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": tool_use_block["id"],
+                    "content": f"{line_count}",
+                }
+            ],
+        }
+    )
 
 
-def process_tool_use(content_blocks):
+def process_tool_use(content_blocks: list[dict[str, Any]]) -> None:
     for block in content_blocks:
         if block["type"] != "tool_use":
             continue
+        if block["name"] == "file_line_counter":
+            handle_file_line_counter_tool_use(block)
+        else:
+            raise ValueError(f"Unhandled tool: {block['name']}")
 
-    if block["name"] == "file_line_counter":
-        handle_file_line_counter_tool_use(block)
-    else:
-        raise ValueError(f"Unhandled tool: {block['name']}")
+
+def main() -> None:
+    MESSAGES.append({"role": "user", "content": "Count number of lines in file " + FILEPATH})
+
+    response_payload = call_anthropic_api()
+    if response_payload["stop_reason"] != "tool_use":
+        print("No tool use detected in the response.")
+        raise SystemExit(1)
+
+    process_tool_use(response_payload["content"])  # appends the tool results
+    response_payload = call_anthropic_api()  # send them back
+
+    print(f"Final response from API: {json.dumps(response_payload, indent=4)}")
+    if response_payload["stop_reason"] == "end_turn":
+        print("Conversation ended successfully.")
+        print(f"Final content: {response_payload['content']}")
 
 
-MESSAGES.append({"role": "user", "content": "Count number of lines in file " + FILEPATH})
-
-### Call the API and process the response
-response_payload = call_anthropic_api()
-if response_payload["stop_reason"] != "tool_use":
-    print("No tool use detected in the response.")
-    exit(1)
-
-# Tool use detected, process it
-process_tool_use(response_payload["content"])
-# send response with tool results back to the API
-
-# del _DEFAULT_REQUEST_PAYLOAD["tools"]
-
-response_payload = call_anthropic_api()
-
-# Print the final response from the API
-print(f"Final response from API: {json.dumps(response_payload, indent=4)}")
-if response_payload["stop_reason"] == "end_turn":
-    print("Conversation ended successfully.")
-    print(f"Final content: {response_payload['content']}")
+if __name__ == "__main__":
+    main()

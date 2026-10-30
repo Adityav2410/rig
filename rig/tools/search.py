@@ -1,7 +1,7 @@
 import subprocess
 
-from ..exceptions import ToolError
-from ..workspace import Workspace
+from ..core.exceptions import ToolError
+from ..sandbox.workspace import Workspace
 from . import tool
 from .fs import resolve
 from .schema import ToolInputSchema, ToolPropertySchema, ToolPropertyType

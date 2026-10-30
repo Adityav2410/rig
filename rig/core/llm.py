@@ -8,9 +8,9 @@ from typing import Any
 import httpx
 from pydantic import BaseModel
 
+from ..util.logging import get_logger
+from ..util.timer import Timer
 from .exceptions import LLMError
-from .logging import get_logger
-from .timer import Timer
 
 logger = get_logger()
 
@@ -43,14 +43,15 @@ def _get_headers() -> dict[str, str]:
 
 
 def _should_retry(response: httpx.Response) -> bool:
-    """Determine if the request should be retried based on the response."""
-    if response.headers.get("x-should-retry") == "false":
-        return False
-    if response.status_code not in _RETRYABLE_STATUS_CODES:
-        return False
-    if response.headers.get("x-should-retry") != "true":
-        return False
-    return True
+    """Retry a retryable status unless the API says not to; retry anything it says to retry.
+
+    `x-should-retry` is the API's own verdict and wins either way. Without it, the status
+    decides: a 429 or 5xx is worth retrying, a 400 is a bug in the request.
+    """
+    hint = response.headers.get("x-should-retry")
+    if hint is not None:
+        return str(hint) == "true"
+    return response.status_code in _RETRYABLE_STATUS_CODES
 
 
 def call(
@@ -60,6 +61,7 @@ def call(
     Call the API with the given request body and return the response.
     """
     last_error = None
+    last_status = "connection"  # the cause in error.llm.<cause>: an HTTP status, or "connection"
     timer = Timer()
     wait = None
     _headers = _get_headers()
@@ -72,7 +74,7 @@ def call(
             response = httpx.post(url=API_URL, headers=_headers, json=request, timeout=timeout)
             logger.debug(f"\n\n\n API response: {json.dumps(response.json(), indent=4)}")
         except httpx.TransportError as e:
-            last_error = repr(e)
+            last_error, last_status = repr(e), "connection"
         else:
             if response.status_code == 200:
                 return response.json(), ApiCallInfo(
@@ -82,6 +84,7 @@ def call(
                 )
 
             last_error = f"Http Error: {response.status_code} - {response.text}"
+            last_status = str(response.status_code)
             if not _should_retry(response):
                 # API explicitly says to not retry.
                 break
@@ -94,4 +97,5 @@ def call(
 
     raise LLMError(
         message=f"Request failed after {attempt + 1} attempts. Last error: {last_error}",
+        status=last_status,
     )

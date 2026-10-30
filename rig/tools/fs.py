@@ -1,8 +1,8 @@
 import subprocess
 from pathlib import Path
 
-from ..exceptions import PathEscapesWorkspace, ToolError
-from ..workspace import Workspace
+from ..core.exceptions import PathEscapesWorkspace, ToolError
+from ..sandbox.workspace import Workspace
 from . import tool
 from .schema import ToolInputSchema, ToolPropertySchema, ToolPropertyType
 

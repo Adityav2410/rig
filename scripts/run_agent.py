@@ -35,15 +35,14 @@ if __name__ == "__main__":
         root=Path.cwd() / "workspaces" / "click", name="click", run_id=run_id, use_sandbox=True
     ) as ws:
         agent = Agent(
-            ws=ws,
-            task=TASK,
-            # task="What is the highest and lowest temperature today in Santa Clara",
+            ws,
             model="claude-haiku-5-5",
             budget=budget,
             trace=Trace.get_dummy_trace(run_id=run_id),
             max_tokens=250,
         )
-        result = agent.run()
+        result = agent.run(TASK)
+        # result = agent.run("What is the highest and lowest temperature today in Santa Clara")
 
     if result.status == "success":
         print(f"Agent ran successfully. Output: {result.final_response}")

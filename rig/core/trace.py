@@ -5,7 +5,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from .logging import get_logger
+from ..util.logging import get_logger
 
 logger = get_logger()
 
@@ -16,6 +16,13 @@ class TraceEvent(BaseModel):
     ts: float
     seq: int
     fields: dict[str, Any]
+
+
+class NullTrace:
+    """A trace that records nothing: for library callers and tests that don't want a file."""
+
+    def log_event(self, kind: str, **fields: Any) -> None:
+        pass
 
 
 class Trace:

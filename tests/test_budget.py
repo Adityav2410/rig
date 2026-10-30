@@ -1,7 +1,7 @@
 import pytest
 
-from rig.budget import Budget
-from rig.exceptions import BudgetExceededError
+from rig.core.budget import Budget
+from rig.core.exceptions import BudgetExceededError
 
 
 def test_check_raises_once_max_steps_reached() -> None:
