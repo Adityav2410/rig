@@ -5,7 +5,8 @@ from pathlib import Path
 
 from typer.testing import CliRunner, Result
 
-from rig.commands import DEFAULTS, Ctx, _settings, app
+from rig.commands import Ctx, _settings, app
+from rig.config import Config
 from rig.providers.fake import FakeProvider, text_turn
 from rig.session import SessionLog
 
@@ -97,5 +98,5 @@ def test_without_flags_the_workspace_is_the_cwd_and_there_is_no_sandbox(tmp_path
 def test_only_flags_that_were_given_override_the_defaults(tmp_path: Path) -> None:
     c = Ctx(cwd=tmp_path)
     s = _settings(c, None, use_sandbox=None, provider=None, model="other", max_tokens=None)
-    assert (s.repo, s.model, s.provider) == (tmp_path, "other", DEFAULTS["provider"])
-    assert s.use_sandbox is False
+    assert (s.repo, s.config.model, s.config.provider) == (tmp_path, "other", Config().provider)
+    assert s.config.use_sandbox is False

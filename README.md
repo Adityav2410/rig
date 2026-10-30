@@ -68,6 +68,18 @@ in `.rig/traces/`. The workspace is the current directory unless you pass `--rep
 run on the host unless you pass `--use-sandbox` (Docker). `./rig.sh …` does the same without
 typing `uv run`, from any directory.
 
+Settings come in layers, lowest first: built-in defaults, your user file
+(`~/.config/rig/config.json`), the project's `.rig/config.json`, `RIG_*` environment variables
+(`RIG_MODEL`, `RIG_BUDGET__MAX_USD`), then command-line flags:
+
+```bash
+uv run rig config set model claude-sonnet-5-5          # this project (.rig/config.json)
+uv run rig config set budget.max_usd 2 --user          # your user file, every project
+uv run rig config list --show-origin                   # every value and where it came from
+```
+
+API keys never go in a config file, and `base_url` is read only from your user file.
+
 Or drive it from Python:
 
 ```python

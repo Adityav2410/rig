@@ -81,7 +81,11 @@ def test_read_only_calls_run_in_parallel_and_finish_in_call_order() -> None:
 def test_a_batch_with_a_mutating_call_runs_sequentially() -> None:
     log: list[str] = []
     tools = [_tool("read_file", log=log), _tool("edit_file", read_only=False, log=log)]
-    calls = (("read_file", {}), ("edit_file", {}), ("read_file", {}))
+    calls: tuple[tuple[str, dict[str, Any]], ...] = (
+        ("read_file", {}),
+        ("edit_file", {}),
+        ("read_file", {}),
+    )
     provider = FakeProvider([tool_turn(*calls), text_turn("done")])
     _run(provider, tools)
     assert log == [

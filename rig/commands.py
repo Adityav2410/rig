@@ -14,8 +14,9 @@ from typing import Annotated, Any
 
 import typer
 
+from . import config
 from .agent import Agent
-from .budget import Budget
+from .config import Config, LoadedConfig
 from .providers.types import AssistantMessage, Event, MessageDelta, Provider, ToolStart, TurnEnd
 from .session import SessionLog
 from .trace import Trace
@@ -43,17 +44,10 @@ def _ctx(ctx: typer.Context) -> Ctx:
     return ctx.obj if isinstance(ctx.obj, Ctx) else Ctx()
 
 
-# Today's defaults. Step 6's config.load(cwd, flags) replaces this dict with the layered
-# config (defaults < user file < project file < RIG_* env); command-line flags stay on top.
-DEFAULTS: dict[str, Any] = {
-    "use_sandbox": False,
-    "provider": "anthropic",
-    "model": "claude-haiku-5-5",
-    "max_tokens": 8192,
-}
+_D = Config()  # built-in defaults, for --help; config files and RIG_* env can change them
 
 # Options shared by every command that runs the agent. Each defaults to None, meaning "not given
-# on the command line", so a flag overrides the lower layers only when it was actually passed.
+# on the command line", so a flag overrides the config only when it was actually passed.
 Repo = Annotated[
     Path | None, typer.Option(help="Workspace to work in [default: current directory]")
 ]
@@ -62,28 +56,34 @@ UseSandbox = Annotated[
     typer.Option("--use-sandbox", help="Run tools in a Docker sandbox, not on the host"),
 ]
 ProviderName = Annotated[
-    str | None, typer.Option(help=f"Which model API to call [default: {DEFAULTS['provider']}]")
+    str | None, typer.Option(help=f"Which model API to call [default: {_D.provider}]")
 ]
-Model = Annotated[str | None, typer.Option(help=f"Model id [default: {DEFAULTS['model']}]")]
+Model = Annotated[str | None, typer.Option(help=f"Model id [default: {_D.model}]")]
 MaxTokens = Annotated[
-    int | None,
-    typer.Option(help=f"Output limit per model call [default: {DEFAULTS['max_tokens']}]"),
+    int | None, typer.Option(help=f"Output limit per model call [default: {_D.max_tokens}]")
 ]
 
 
 @dataclass(frozen=True)
 class _Settings:
     repo: Path
-    use_sandbox: bool
-    provider: str
-    model: str
-    max_tokens: int
+    config: Config
 
 
 def _settings(c: Ctx, repo: Path | None, **flags: Any) -> _Settings:
-    """The flags that were given, over the defaults; the workspace defaults to the cwd."""
-    given = {k: v for k, v in flags.items() if v is not None}
-    return _Settings(repo=repo or c.cwd, **(DEFAULTS | given))
+    """The flags actually given, over the layered config; the workspace defaults to the cwd."""
+    loaded = _load_config(c, flags)
+    return _Settings(repo or c.cwd, loaded.config)
+
+
+def _load_config(c: Ctx, flags: dict[str, Any] | None = None) -> LoadedConfig:
+    try:
+        loaded = config.load(c.cwd, flags)
+    except config.ConfigError as e:
+        raise _fail(str(e)) from None
+    for warning in loaded.warnings:
+        typer.echo(f"rig: warning: {warning}", err=True)
+    return loaded
 
 
 def _fail(message: str, code: int = 1) -> typer.Exit:
@@ -134,14 +134,15 @@ def _run(c: Ctx, o: _Settings, session: SessionLog, task: str | None) -> None:
     session_id = session.path.stem
     run_id = uuid.uuid4().hex[:8]  # one per run: names the sandbox container
     trace = Trace(run_id=run_id, filepath=str(c.cwd / ".rig" / "traces" / f"{session_id}.jsonl"))
-    with Workspace(root=o.repo, name=o.repo.name, run_id=run_id, use_sandbox=o.use_sandbox) as ws:
+    cfg = o.config
+    with Workspace(root=o.repo, name=o.repo.name, run_id=run_id, use_sandbox=cfg.use_sandbox) as ws:
         agent = Agent(
             ws,
-            budget=Budget.get_dummy_budget(),
+            budget=cfg.budget.build(),
             trace=trace,
-            provider=c.provider or o.provider,
-            model=None if c.provider else o.model,
-            max_tokens=o.max_tokens,
+            provider=c.provider or cfg.provider,
+            model=None if c.provider else cfg.model,
+            max_tokens=cfg.max_tokens,
             session=session,
         )
         if c.on_agent:
@@ -240,3 +241,66 @@ def show(
             )
         )
         typer.echo(f"{e['id']}  {role:<11} {' '.join(str(text).split())[:70]}")
+
+
+# --- rig config: read and change the layered settings ---
+
+config_app = typer.Typer(
+    help="Read and change settings. Layers, lowest first: built-in defaults, your user file "
+    "(~/.config/rig/config.json), the project's .rig/config.json, RIG_* environment variables, "
+    "then command-line flags.",
+    no_args_is_help=True,
+)
+app.add_typer(config_app, name="config")
+
+UserScope = Annotated[
+    bool, typer.Option("--user", help="Your user file instead of the project's .rig/config.json")
+]
+
+
+@config_app.command("get")
+def config_get(
+    ctx: typer.Context, key: Annotated[str, typer.Argument(help="e.g. budget.max_usd")]
+) -> None:
+    """Print the value a run would use."""
+    try:
+        typer.echo(_load_config(_ctx(ctx)).get(key))
+    except config.ConfigError as e:
+        raise _fail(str(e)) from None
+
+
+@config_app.command("set")
+def config_set(
+    ctx: typer.Context,
+    key: Annotated[str, typer.Argument(help="e.g. model, budget.max_usd")],
+    value: str,
+    user: UserScope = False,
+) -> None:
+    """Set KEY in the project file (or your user file with --user)."""
+    try:
+        path = config.set_value(_ctx(ctx).cwd, key, value, "user" if user else "project")
+    except config.ConfigError as e:
+        raise _fail(str(e)) from None
+    typer.echo(f"{key} = {value}  ({path})")
+
+
+@config_app.command("unset")
+def config_unset(ctx: typer.Context, key: str, user: UserScope = False) -> None:
+    """Remove KEY from the project file (or your user file with --user)."""
+    if not config.unset_value(_ctx(ctx).cwd, key, "user" if user else "project"):
+        raise _fail(f"{key} is not set in the {'user' if user else 'project'} file")
+    typer.echo(f"unset {key}")
+
+
+@config_app.command("list")
+def config_list(
+    ctx: typer.Context,
+    show_origin: Annotated[
+        bool, typer.Option("--show-origin", help="Name the layer each value came from")
+    ] = False,
+) -> None:
+    """Print every setting a run would use."""
+    loaded = _load_config(_ctx(ctx))
+    for key in config.leaves(loaded.config.model_dump()):
+        line = f"{key} = {loaded.get(key)}"
+        typer.echo(f"{line:<40}  # {loaded.origins[key]}" if show_origin else line)
