@@ -101,3 +101,22 @@ def test_through_the_dispatcher_a_miss_is_an_error_result_for_the_model(ws: Work
     (ws.root / "app.py").write_text("x = 1\n")
     out, is_error = run_tool(ws, "edit_file", path="app.py", edits=[_edit("x = 2", "x = 3")])
     assert is_error and "old_text not found" in out
+
+
+def test_replace_all_changes_every_occurrence(ws: Workspace) -> None:
+    f = ws.root / "app.py"
+    f.write_text("count = 0\ncount += 1\nprint(count)\n")
+    edit_file(ws, "app.py", [{"old_text": "count", "new_text": "total", "replace_all": True}])
+    assert f.read_text() == "total = 0\ntotal += 1\nprint(total)\n"
+
+
+def test_without_replace_all_a_repeated_match_says_how_to_fix_it(ws: Workspace) -> None:
+    (ws.root / "app.py").write_text("x = 1\nx = 2\n")
+    with pytest.raises(ToolError, match="matches 2 times.*set replace_all"):
+        edit_file(ws, "app.py", [_edit("x", "y")])
+
+
+def test_an_edit_that_already_landed_says_so(ws: Workspace) -> None:
+    (ws.root / "app.py").write_text("def run():\n    serve()\n")
+    with pytest.raises(ToolError, match="may already be applied"):
+        edit_file(ws, "app.py", [_edit("def run():\n    pass", "def run():\n    serve()")])

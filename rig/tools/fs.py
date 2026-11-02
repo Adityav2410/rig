@@ -1,6 +1,7 @@
 import difflib
 import subprocess
 from pathlib import Path
+from typing import Any
 
 from ..core.exceptions import PathEscapesWorkspace, ToolError
 from ..sandbox.workspace import Workspace
@@ -32,6 +33,11 @@ _EDIT = ToolPropertySchema(
         "new_text": ToolPropertySchema(
             type=ToolPropertyType.STRING, description="Replacement text."
         ),
+        "replace_all": ToolPropertySchema(
+            type=ToolPropertyType.BOOLEAN,
+            description="Replace every occurrence of old_text instead of requiring exactly one, "
+            "e.g. to rename a variable. Defaults to false.",
+        ),
     },
     required=["old_text", "new_text"],
 )
@@ -41,7 +47,8 @@ _EDIT = ToolPropertySchema(
     name="edit_file",
     description="Replace text in a file. Use this, not `bash`, to change source code. Each "
     "edit's `old_text` must appear exactly once in the file, indentation included: read the "
-    "file first and include enough lines to make it unique. All edits are checked against the "
+    "file first and include enough lines to make it unique, or set `replace_all` on that edit "
+    "to change every occurrence. There is no fuzzy matching. All edits are checked against the "
     "file before anything changes; if one fails, nothing is written and the error shows the "
     "closest lines. Use plain newlines; the file keeps its own line endings. To create a file, "
     "pass one edit with an empty `old_text`.",
@@ -67,16 +74,21 @@ _EDIT = ToolPropertySchema(
                 {"old_text": "def run():\n    pass", "new_text": "def run():\n    serve()"},
             ],
         },
+        {
+            "path": "src/app.py",
+            "edits": [{"old_text": "old_name", "new_text": "new_name", "replace_all": True}],
+        },
     ],
 )
-def edit_file(ws: Workspace, path: str, edits: list[dict[str, str]]) -> str:
+def edit_file(ws: Workspace, path: str, edits: list[dict[str, Any]]) -> str:
     """Apply all `edits` to one file, or none of them.
 
     How:
       1. Read bytes, so Windows (CRLF) line endings survive; text mode would turn them into LF.
          Match on an LF copy, since the model writes `old_text` with plain newlines.
-      2. Check every edit before changing anything: each must match exactly once and not
-         overlap another. A miss names the edit and the closest lines; it never guesses.
+      2. Check every edit before changing anything: each must match exactly once (or, with
+         `replace_all`, at least once) and not overlap another. A miss never guesses: it names
+         the edit and the closest lines, or says the edit looks already applied.
       3. Apply from the end of the file backwards, so earlier positions stay valid, then put
          the original line endings back and write.
     """
@@ -108,21 +120,32 @@ def edit_file(ws: Workspace, path: str, edits: list[dict[str, str]]) -> str:
     ending = _line_ending(raw)
     content = _to_lf(raw[len(bom) :])
 
-    spans = []  # (start, end, new_text) of each edit in the LF copy
+    spans = []  # (start, end, new_text) of each replacement in the LF copy
     for i, e in enumerate(edits, 1):
         old, new = _to_lf(e["old_text"]), _to_lf(e["new_text"])
         n = content.count(old)
         which = f"edit {i} of {len(edits)}"
         if n == 0:
-            raise ToolError(
-                "edit_file", f"{which}: old_text not found in {path}.{_closest(content, old)}"
+            # After a resume or a retry the model may re-send an edit that already landed.
+            applied = (
+                " Its new_text is already in the file, so this edit may already be applied."
+                if new.strip() and new in content
+                else ""
             )
-        if n > 1:
             raise ToolError(
-                "edit_file", f"{which}: old_text matches {n} times in {path}; add surrounding lines"
+                "edit_file",
+                f"{which}: old_text not found in {path}.{applied}{_closest(content, old)}",
             )
-        start = content.index(old)
-        spans.append((start, start + len(old), new))
+        if n > 1 and not e.get("replace_all"):
+            raise ToolError(
+                "edit_file",
+                f"{which}: old_text matches {n} times in {path}; add surrounding lines, "
+                "or set replace_all to change every one",
+            )
+        start = content.find(old)
+        while start != -1:  # once, unless replace_all
+            spans.append((start, start + len(old), new))
+            start = content.find(old, start + len(old))
     spans.sort()
     for (_, prev_end, _), (start, _, _) in zip(spans, spans[1:], strict=False):
         if start < prev_end:
