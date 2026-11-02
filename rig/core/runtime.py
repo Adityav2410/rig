@@ -41,8 +41,11 @@ TRUNCATED_MSG = (
 ABORTED_MSG = "Aborted by user"
 ORPHAN_MSG = "No result was recorded for this call (the run was interrupted)."
 
-ToolOutput = tuple[str, bool]  # (output, is_error)
+ToolOutput = tuple[str, bool]
+"""What a tool returns: (output, is_error). Errors are results for the model, never raised."""
+
 ToolCallResult = tuple[ToolCall, str, bool]
+"""One answered call: (call, output, is_error). `run_tools` returns these in call order."""
 
 
 @dataclass(frozen=True)
@@ -220,7 +223,8 @@ def run_tools(
       1. A `max_tokens` stop means the model was cut off mid-response, so a call's arguments
          may be incomplete JSON. Nothing runs; every call gets an error asking for a re-issue.
       2. `one(c)` handles a single call from start to finish and never raises: abort,
-         unknown tool and a denied call all become error results the model can read.
+         unknown tool, unparseable arguments and a denied call all become error results the
+         model can read.
       3. If every call is read-only, they run in parallel threads. `pool.map` returns results
          in submission order however they finish, so ToolEnds still come out in call order.
          All ToolStarts are yielded first, because the batch starts together.
@@ -242,6 +246,13 @@ def run_tools(
         tool = tools.get(c.name)
         if tool is None:
             return c, f"Tool {c.name} is not registered. Available tools: {sorted(tools)}", True
+        if c.invalid_arguments is not None:  # pi's argumentsError: quote it so the model can fix it
+            bad = c.invalid_arguments[:2000]
+            return (
+                c,
+                f"Arguments for {c.name} are not a JSON object: {bad!r}. Re-issue the call.",
+                True,
+            )
         verdict = hooks.before_tool(c)
         if verdict is not None:
             return c, f"Blocked: {verdict.reason}", True

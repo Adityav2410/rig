@@ -1,6 +1,9 @@
-"""The dollar cost of one model call, from a price table in dollars per million tokens.
+"""The dollar cost of one model call, from price tables in dollars per million tokens.
 
-claude.json holds Anthropic's prices; Thursday's OpenAI and OpenRouter models add their own rows.
+Each *.json file in this package is one vendor's table, keyed by model id: claude.json holds
+Anthropic's prices; openai.json holds OpenAI's, plus OpenRouter's ids for the same models
+("openai/gpt-6-luna"), which OpenRouter bills at the vendor's rate. OpenAI charges nothing
+extra to write its cache, so there cache_write_5m equals input.
 A model can be priced in tiers by prompt size ("up_to_100k" / "over_100k"); the tier is chosen
 by the whole prompt and then applies to the whole call, input and output alike.
 """
@@ -10,17 +13,19 @@ from functools import cache
 from pathlib import Path
 from typing import Any
 
-from ..util.logging import get_logger
+from ...util.logging import get_logger
 
 logger = get_logger()
 
-PRICE_TABLE = Path(__file__).parent / "claude.json"
+PRICES_DIR = Path(__file__).parent
 _unpriced: set[str] = set()
 
 
 @cache
 def _table() -> dict[str, Any]:
-    data: dict[str, Any] = json.loads(PRICE_TABLE.read_text())
+    data: dict[str, Any] = {}
+    for path in sorted(PRICES_DIR.glob("*.json")):
+        data |= json.loads(path.read_text())
     return data
 
 

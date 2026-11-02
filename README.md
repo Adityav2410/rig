@@ -16,11 +16,14 @@ Each week of the 18-week plan is preserved as a branch (`week1`, `week2`, ...), 
 
 rig is meant to work with any capable model, not one vendor. From Week 2 it talks to models through one small `Provider` interface, so the agent loop never depends on a vendor's wire format.
 
-| Provider | API | Status |
-|---|---|---|
-| Anthropic | Messages API | Supported |
-| OpenAI | Chat Completions | Planned (Week 2) |
-| OpenRouter and other OpenAI-compatible endpoints (vLLM, Ollama, ...) | Chat Completions | Planned (Week 2) |
+| `--provider` | API | API key variable | Default model |
+|---|---|---|---|
+| `anthropic` (default) | Messages API | `ANTHROPIC_API_KEY` | `claude-haiku-5-5` |
+| `openai` | Chat Completions | `OPENAI_API_KEY` | `gpt-6-luna` |
+| `openrouter` | Chat Completions | `OPENROUTER_API_KEY` | `anthropic/claude-haiku-5.5` |
+
+Any other OpenAI-compatible server (vLLM, Ollama, ...) works as `openai` with `base_url` set in
+your user file, e.g. `rig config set base_url http://localhost:11434/v1 --user`.
 
 ## What's in it
 
@@ -35,7 +38,7 @@ rig is meant to work with any capable model, not one vendor. From Week 2 it talk
 
 ## Quickstart
 
-Requirements: Python 3.14, [uv](https://docs.astral.sh/uv/), Docker, and an API key for a supported provider (today: an [Anthropic API key](https://platform.claude.com/)).
+Requirements: Python 3.14, [uv](https://docs.astral.sh/uv/), Docker, and an API key for one of the providers above.
 
 ```bash
 git clone https://github.com/Adityav2410/rig.git
@@ -62,7 +65,8 @@ uv run rig fork <session> <entry_id> --task "..."       # branch from an earlier
 
 While a run streams, Ctrl-C stops it at the next safe point (twice quits), a line starting
 with `/steer` redirects the current task, and any other line queues the next one. `rig resume`
-with no `--task` finishes a run that was interrupted. Sessions live in `.rig/sessions/`, traces
+with no `--task` finishes a run that was interrupted. If the repository has an `AGENTS.md` at
+its root, it is added to the system prompt. Sessions live in `.rig/sessions/`, traces
 in `.rig/traces/`. The workspace is the current directory unless you pass `--repo`, and tools
 run on the host unless you pass `--use-sandbox` (Docker). `./rig.sh …` does the same without
 typing `uv run`, from any directory.
@@ -136,9 +140,13 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for how changes are organised around the 
 
 ```
 rig/            the agent package
+  providers/    rig's message and event types, one adapter per model API
+  core/         the loop, the Agent, sessions, config, budget, trace
+    pricing/    per-model prices, one JSON table per vendor
   tools/        tool implementations and the registry
-  docker/       sandbox Dockerfile
-  costs/        per-model pricing
+  sandbox/      workspace, Docker sandbox and its Dockerfile, repo snapshots
+  cli/          the `rig` command
+  util/         logging
   prompts/      system prompt
 evals/          task ladder, seeds, hidden tests, runner
 scripts/        entry points: run the agent, build the sandbox, read a trace

@@ -12,7 +12,8 @@ from ..core.agent import Agent
 from ..core.config import Config
 from ..core.session import SessionLog
 from ..core.trace import Trace
-from ..providers.types import AssistantMessage, Event, MessageDelta, ToolStart, TurnEnd
+from ..providers import get_provider
+from ..providers.types import AssistantMessage, Event, MessageDelta, Provider, ToolStart, TurnEnd
 from ..sandbox.workspace import Workspace
 from .common import Ctx, fail, get_ctx, load_config
 
@@ -30,9 +31,10 @@ UseSandbox = Annotated[
     typer.Option("--use-sandbox", help="Run tools in a Docker sandbox, not on the host"),
 ]
 ProviderName = Annotated[
-    str | None, typer.Option(help=f"Which model API to call [default: {_D.provider}]")
+    str | None,
+    typer.Option(help=f"anthropic, openai or openrouter [default: {_D.provider}]"),
 ]
-Model = Annotated[str | None, typer.Option(help=f"Model id [default: {_D.model}]")]
+Model = Annotated[str | None, typer.Option(help="Model id [default: the provider's own]")]
 MaxTokens = Annotated[
     int | None, typer.Option(help=f"Output limit per model call [default: {_D.max_tokens}]")
 ]
@@ -83,6 +85,15 @@ def _render(event: Event) -> None:
             typer.echo("\n[aborted]")
 
 
+def _provider(cfg: Config) -> Provider:
+    try:
+        return get_provider(
+            cfg.provider, cfg.model, max_tokens=cfg.max_tokens, base_url=cfg.base_url
+        )
+    except ValueError as e:  # an unknown provider, or its API key isn't set
+        raise fail(str(e)) from None
+
+
 def _run(c: Ctx, o: _Settings, session: SessionLog, task: str | None) -> None:
     """Run the agent on `session`, streaming its output; exit 0 only when it ends in an answer."""
     if task is None:
@@ -90,19 +101,14 @@ def _run(c: Ctx, o: _Settings, session: SessionLog, task: str | None) -> None:
         if not last or isinstance(last[0], AssistantMessage):
             # Sending a transcript that ends in an answer would ask the model to extend it.
             raise fail("this session ended with an answer; pass --task to continue it")
+    cfg = o.config
+    provider = c.provider or _provider(cfg)  # first: a bad name or a missing key starts nothing
     session_id = session.path.stem
     run_id = uuid.uuid4().hex[:8]  # one per run: names the sandbox container
     trace = Trace(run_id=run_id, filepath=str(c.cwd / ".rig" / "traces" / f"{session_id}.jsonl"))
-    cfg = o.config
     with Workspace(root=o.repo, name=o.repo.name, run_id=run_id, use_sandbox=cfg.use_sandbox) as ws:
         agent = Agent(
-            ws,
-            budget=cfg.budget.build(),
-            trace=trace,
-            provider=c.provider or cfg.provider,
-            model=None if c.provider else cfg.model,
-            max_tokens=cfg.max_tokens,
-            session=session,
+            ws, budget=cfg.budget.build(), trace=trace, provider=provider, session=session
         )
         if c.on_agent:
             c.on_agent(agent)

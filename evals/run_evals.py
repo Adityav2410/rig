@@ -14,6 +14,7 @@ from typing import Any
 import yaml
 
 from rig import Agent, Budget, Trace, Workspace
+from rig.providers import DEFAULT_MODELS
 from rig.sandbox.snapshot import create_snapshot
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -108,7 +109,12 @@ def grade_pytest(task: dict[str, Any], snap_dir: Path, ws: Workspace) -> dict[st
 
 
 def run_one(
-    task: dict[str, Any], repeat: int, model: str, ref: str, results_path: Path, provider: str
+    task: dict[str, Any],
+    repeat: int,
+    model: str | None,
+    ref: str,
+    results_path: Path,
+    provider: str,
 ) -> None:
     run_id = str(uuid.uuid4())
     run_dir = RUNS_DIR / run_id
@@ -148,6 +154,8 @@ def run_one(
         "run_id": run_id,
         "task_id": task["id"],
         "repeat": repeat,
+        "provider": provider,
+        "model": model or DEFAULT_MODELS[provider],
         "status": status,
         "passed": grade["passed"],
         "reason": grade.get("reason"),
@@ -168,8 +176,8 @@ def main() -> None:
     parser.add_argument("--runs", type=int, default=1, help="Repeats per task")
     parser.add_argument("--tasks", type=Path, default=REPO_ROOT / "evals" / "tasks" / "week1.yaml")
     parser.add_argument("--results", type=Path, default=REPO_ROOT / "evals" / "results.jsonl")
-    parser.add_argument("--model", default="claude-haiku-5-5")
-    parser.add_argument("--provider", default="anthropic", help="Which model API to call")
+    parser.add_argument("--model", default=None, help="Model id [default: the provider's own]")
+    parser.add_argument("--provider", default="anthropic", help="anthropic, openai or openrouter")
     parser.add_argument("--ref", default="HEAD", help="git ref in workspaces/click to snapshot")
     parser.add_argument("--task-id", default=None, help="Run only this one task id")
     args = parser.parse_args()

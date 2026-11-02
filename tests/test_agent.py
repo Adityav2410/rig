@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from rig import Agent, Budget, Trace, Workspace
+from rig.core.agent import get_sys_prompt
 from rig.core.exceptions import LLMError
 from rig.providers.fake import FakeProvider, text_turn, tool_turn
 from rig.providers.types import Context, Event
@@ -105,3 +106,20 @@ def test_without_a_trace_the_agent_runs_and_writes_nothing(tmp_path: Path) -> No
 
     assert agent.run("go").status == "success"
     assert list(tmp_path.iterdir()) == []
+
+
+def test_agents_md_reaches_the_model_inside_project_instructions(tmp_path: Path) -> None:
+    (tmp_path / "AGENTS.md").write_text("Always run tox. MARKER-7f3\n")
+    provider = FakeProvider([text_turn("ok")])
+    _agent(tmp_path, provider).run("go")
+
+    system = provider.contexts[0].system or ""
+    assert '<project_instructions path="AGENTS.md">\nAlways run tox. MARKER-7f3\n' in system
+    assert system.startswith(get_sys_prompt() or "")  # after the base prompt
+    assert _trace(tmp_path)[0]["fields"]["project_instructions"] is True
+
+
+def test_without_agents_md_the_system_prompt_is_the_base_one(tmp_path: Path) -> None:
+    provider = FakeProvider([text_turn("ok")])
+    _agent(tmp_path, provider).run("go")
+    assert provider.contexts[0].system == get_sys_prompt()

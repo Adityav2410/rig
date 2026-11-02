@@ -88,11 +88,27 @@ def _edited_path(ws: Workspace, arguments: dict[str, Any]) -> Path:
     return (ws.root / str(arguments.get("path", ""))).resolve()
 
 
+def system_prompt(root: Path) -> str | None:
+    """The base prompt, then the repo's AGENTS.md, if it has one (pi's renderProjectContext).
+
+    The tags tell the model where the base prompt ends and the project's own rules begin, and
+    which file they came from. Only the repo root is searched for now.
+    """
+    base = get_sys_prompt()
+    path = root / "AGENTS.md"
+    if not path.is_file():
+        return base
+    block = (
+        f'<project_instructions path="AGENTS.md">\n'
+        f"{path.read_text(errors='replace').strip()}\n"
+        f"</project_instructions>"
+    )
+    return f"{base.rstrip()}\n\n{block}" if base else block
+
+
 def _resolve_provider(provider: str | Provider, model: str | None, max_tokens: int) -> Provider:
     if isinstance(provider, str):
-        if model is None:
-            raise ValueError(f"model is required when provider is a name ({provider!r})")
-        return get_provider(provider, model, max_tokens=max_tokens)
+        return get_provider(provider, model, max_tokens=max_tokens)  # no model: its default
     if model is not None and model != provider.model:
         raise ValueError(f"model={model!r} disagrees with the provider's {provider.model!r}")
     return provider
@@ -124,6 +140,7 @@ class Agent:
         self._last_stop: StopReason | None = None  # the latest TurnEnd's, decides the status
         self._provider = _resolve_provider(provider, model, max_tokens)
         self._tools = tools if tools is not None else build_tools(ws)
+        self._system = system_prompt(ws.root)  # read once: a session keeps one system prompt
         # Earlier history: a resumed or forked session's branch, or messages passed in directly.
         self.messages: list[Message] = session.branch() if session else list(messages or [])
         self._session = session
@@ -177,7 +194,7 @@ class Agent:
         try:
             for event in runtime.run(
                 self._provider,
-                get_sys_prompt(),
+                self._system,
                 self.messages,
                 self._tools,
                 self._budget,
@@ -216,6 +233,7 @@ class Agent:
             provider=self._provider.name,
             model=self._provider.model,
             tools=[t.spec.name for t in self._tools],
+            project_instructions=self._system != get_sys_prompt(),  # AGENTS.md was loaded
         )
         result = AgentRunResult(status="error.internal", messages=[])
         try:

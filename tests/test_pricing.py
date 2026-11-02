@@ -1,4 +1,4 @@
-"""Prices come from claude.json: every model in it, cache tokens included, tiers by prompt size."""
+"""Prices come from pricing/*.json: every model, cache tokens included, tiers by prompt size."""
 
 import pytest
 
@@ -39,3 +39,10 @@ def test_haikus_tier_is_chosen_by_the_whole_prompt() -> None:
 
 def test_an_unknown_model_costs_nothing_rather_than_failing() -> None:
     assert price("not-a-model", _usage(1_000, 1_000)) == 0.0
+
+
+def test_openai_and_openrouter_models_are_priced() -> None:
+    # GPT-6 Luna: $0.10 in, $0.50 out per million up to 272k prompt tokens, then $0.20 / $0.75.
+    assert price("gpt-6-luna", _usage(100_000, 100_000)) == pytest.approx(0.06)
+    assert rates("gpt-6-luna", 272_001) == rates("gpt-6-luna", 300_000) != rates("gpt-6-luna", 1)
+    assert price("openai/gpt-6-luna", _usage(1_000_000)) == pytest.approx(0.10)

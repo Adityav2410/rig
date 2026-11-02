@@ -20,6 +20,9 @@ class ToolCall(BaseModel):  # provider: the model asked for a tool
     id: str
     name: str
     arguments: dict[str, Any]
+    # The raw argument string when it wasn't a JSON object; arguments is then {} and the
+    # runtime answers the call with an error instead of running it.
+    invalid_arguments: str | None = None
 
 
 class UserMessage(BaseModel):

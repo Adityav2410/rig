@@ -1,0 +1,31 @@
+{
+  "gpt-6-astra": {
+    "up_to_272k": {"input": 10.00, "cache_write_5m": 10.00, "cache_hit": 1.00, "output": 50.00},
+    "over_272k":  {"input": 20.00, "cache_write_5m": 20.00, "cache_hit": 2.00, "output": 75.00}
+  },
+  "gpt-6.1-sol": {
+    "up_to_272k": {"input": 2.00, "cache_write_5m": 2.00, "cache_hit": 0.10, "output": 10.00},
+    "over_272k":  {"input": 4.00, "cache_write_5m": 4.00, "cache_hit": 0.20, "output": 15.00}
+  },
+  "gpt-6.1-terra": {
+    "up_to_272k": {"input": 1.00, "cache_write_5m": 1.00, "cache_hit": 0.05, "output": 5.00},
+    "over_272k":  {"input": 2.00, "cache_write_5m": 2.00, "cache_hit": 0.10, "output": 7.50}
+  },
+  "gpt-6-luna": {
+    "up_to_272k": {"input": 0.10, "cache_write_5m": 0.10, "cache_hit": 0.01, "output": 0.50},
+    "over_272k":  {"input": 0.20, "cache_write_5m": 0.20, "cache_hit": 0.02, "output": 0.75}
+  },
+  "gpt-5.6-luna": {
+    "up_to_272k": {"input": 0.20, "cache_write_5m": 0.20, "cache_hit": 0.02, "output": 1.20},
+    "over_272k":  {"input": 0.40, "cache_write_5m": 0.40, "cache_hit": 0.04, "output": 1.80}
+  },
+  "gpt-5-mini": {"input": 0.25, "cache_write_5m": 0.25, "cache_hit": 0.025, "output": 2.00},
+  "gpt-5-nano": {"input": 0.05, "cache_write_5m": 0.05, "cache_hit": 0.005, "output": 0.40},
+
+  "openai/gpt-6.1-sol":   {"input": 2.00, "cache_write_5m": 2.00, "cache_hit": 0.10, "output": 10.00},
+  "openai/gpt-6.1-terra": {"input": 1.00, "cache_write_5m": 1.00, "cache_hit": 0.05, "output": 5.00},
+  "openai/gpt-6-luna":    {"input": 0.10, "cache_write_5m": 0.10, "cache_hit": 0.01, "output": 0.50},
+  "openai/gpt-5-mini":    {"input": 0.25, "cache_write_5m": 0.25, "cache_hit": 0.025, "output": 2.00},
+  "anthropic/claude-haiku-5.5":  {"input": 0.10, "cache_write_5m": 0.125, "cache_hit": 0.01, "output": 0.50},
+  "anthropic/claude-sonnet-5.5": {"input": 2.00, "cache_write_5m": 2.50,  "cache_hit": 0.10, "output": 10.00}
+}

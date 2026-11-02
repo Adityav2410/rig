@@ -10,9 +10,9 @@ from typing import Any
 import pytest
 from typer.testing import CliRunner
 
+from rig.cli import sessions as sessions_module
 from rig.cli.app import app
 from rig.cli.common import Ctx
-from rig.core import agent as agent_module
 from rig.core import config
 from rig.providers.fake import FakeProvider, text_turn
 
@@ -147,11 +147,11 @@ def test_config_set_then_run_uses_the_new_model(
 ) -> None:
     built: list[tuple[str, str]] = []
 
-    def fake_get_provider(name: str, model: str, *, max_tokens: int = 0) -> FakeProvider:
+    def fake_get_provider(name: str, model: str, **_: object) -> FakeProvider:
         built.append((name, model))
         return FakeProvider([text_turn("ok")])
 
-    monkeypatch.setattr(agent_module, "get_provider", fake_get_provider)
+    monkeypatch.setattr(sessions_module, "get_provider", fake_get_provider)
     ctx = Ctx(cwd=tmp_path)
 
     assert runner.invoke(app, ["config", "set", "model", "claude-test-x"], obj=ctx).exit_code == 0

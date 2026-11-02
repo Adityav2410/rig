@@ -15,6 +15,7 @@ from rig.providers.types import (
     ToolResult,
     ToolSpec,
     TurnEnd,
+    Usage,
     UserMessage,
 )
 
@@ -130,3 +131,22 @@ def test_orphaned_calls_get_a_result_in_the_request_only() -> None:
     fixed = runtime._close_orphans(messages)
     assert [getattr(m, "call_id", None) for m in fixed] == [None, None, "1", "2", None]
     assert len(messages) == 4  # the stored transcript is untouched
+
+
+def test_a_call_with_invalid_arguments_is_answered_with_an_error_not_run() -> None:
+    ran: list[str] = []
+    call = ToolCall(id="c1", name="read", arguments={}, invalid_arguments='{"path": ')
+    turn = [
+        call,
+        TurnEnd(
+            stop_reason="tool_use",
+            usage=Usage(),
+            message=AssistantMessage(content=[call], provider="fake", model="fake"),
+        ),
+    ]
+    provider = FakeProvider([turn, text_turn("fixed")])
+    _, messages = _run(provider, [_tool("read", log=ran)])
+
+    result = next(m for m in messages if isinstance(m, ToolResult))
+    assert result.is_error and '{"path": ' in result.output
+    assert ran == []

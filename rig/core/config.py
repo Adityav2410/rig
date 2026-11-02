@@ -39,7 +39,7 @@ class Config(BaseModel):
     model_config = ConfigDict(extra="forbid")  # a typo in a file is an error, not a silent no-op
 
     provider: str = "anthropic"
-    model: str = "claude-haiku-5-5"
+    model: str | None = None  # None: the provider's default (providers.DEFAULT_MODELS)
     max_tokens: int = 8192
     use_sandbox: bool = False
     base_url: str | None = None  # a local or proxy endpoint; user file only

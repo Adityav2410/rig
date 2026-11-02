@@ -42,6 +42,7 @@ class AnthropicProvider:
         model: str,
         *,
         max_tokens: int = 10_000,
+        base_url: str | None = None,
         client: anthropic.Anthropic | None = None,
         max_retries: int = 3,
         timeout: float = 300,
@@ -49,7 +50,10 @@ class AnthropicProvider:
         self.model = model
         self.max_tokens = max_tokens
         # The SDK reads ANTHROPIC_API_KEY and retries 408/409/429/5xx with backoff itself.
-        self._client = client or anthropic.Anthropic(max_retries=max_retries, timeout=timeout)
+        extra: dict[str, Any] = {"base_url": base_url} if base_url else {}  # else SDK default
+        self._client = client or anthropic.Anthropic(
+            max_retries=max_retries, timeout=timeout, **extra
+        )
 
     # --- request: rig Context -> Messages API body ---
 
