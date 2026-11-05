@@ -389,6 +389,9 @@ kbd{font:600 13px/1 var(--mono);border:1px solid var(--line);border-bottom-width
 .both>div{background:var(--bg);color:var(--ink);padding:var(--s4);border-radius:var(--r-lg);border:1px solid var(--line);min-width:0}
 
 /* ---- responsive ---- */
+/* Wide screens: a wider column for code and tables; prose grows less, to stay readable. */
+@media (min-width:1600px){ :root{ --content:880px; --measure:76ch } }
+@media (min-width:1920px){ :root{ --content:1000px; --measure:80ch } }
 @media (max-width:1279px){
   .page{grid-template-columns:minmax(0,var(--content))}
   .outline{display:none}
