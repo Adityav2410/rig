@@ -68,8 +68,8 @@ class SessionLog:
 
         How: index the entries by id, walk `parent_id` links back from the leaf to the root,
         then reverse the path. Entries on other branches are never visited, which is what
-        makes a fork cheap. Non-message entries on the path (Week 3 adds compaction entries)
-        are skipped here.
+        makes a fork cheap. Non-message entries on the path (such as compaction entries) are
+        skipped here.
         """
         leaf_id = leaf_id or self.head
         if leaf_id is None:

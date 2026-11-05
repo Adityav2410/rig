@@ -13,7 +13,7 @@ def create_snapshot(
     `git init` comes before `git apply` on purpose. Run outside a repository of its own,
     `git apply` works relative to whatever repository encloses `dest` (rig's own, since
     snapshots live under runs/) and silently skips every path outside it while still
-    exiting 0. That dropped every seed from Week 1 on; the check after applying makes a
+    exiting 0. That once dropped every seed without a word; the check after applying makes a
     skipped seed an error instead.
     """
     dest.mkdir(parents=True)

@@ -55,7 +55,7 @@ def price(model: str, usage: dict[str, int]) -> float:
             _unpriced.add(model)
             logger.warning(f"no price for model {model!r}; its calls count as $0 toward the budget")
         return 0.0
-    # Cache writes at the 5-minute rate: usage doesn't split writes by TTL yet (Week 3 does).
+    # Cache writes at the 5-minute rate: usage doesn't split writes by TTL yet.
     return (
         usage["input_tokens"] * r["input"]
         + usage["output_tokens"] * r["output"]

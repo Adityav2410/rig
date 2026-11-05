@@ -1,4 +1,4 @@
-"""The Week 1 eval harness: per task, per repeat, a fresh snapshot, the seed if any,
+"""The eval harness: per task, per repeat, a fresh snapshot, the seed if any,
 a full agent run, grading inside the still-running sandbox, one line to results.jsonl.
 """
 

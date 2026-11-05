@@ -299,7 +299,7 @@ class Agent:
     # --- trace ---
 
     def _record(self, event: Event) -> None:
-        """Write one trace event per runtime Event, under Week 1's kind names (Week 5 reads them).
+        """Write one trace event per runtime Event, under stable kind names readers rely on.
 
         MessageDeltas are skipped on purpose: TurnEnd carries the same text whole, and a line
         per chunk would bury everything else.
