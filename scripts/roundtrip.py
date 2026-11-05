@@ -1,4 +1,4 @@
-"""Week 1, Monday: one tool call by hand over raw HTTP, before rig has any modules.
+"""One tool call by hand over raw HTTP, using none of rig's modules.
 
 The model is asked to count the lines of AGENTS.md, calls the `file_line_counter` tool, gets
 the result back, and answers. Needs ANTHROPIC_API_KEY; makes two billable requests.

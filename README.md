@@ -20,7 +20,7 @@ Each week of the 18-week plan is preserved as a branch (`week1`, `week2`, ...), 
 | API client | `rig/core/llm.py` | One function, `call(request)`, with retries and backoff; the only network code |
 | Tools | `rig/tools/` | `list_files`, `read_file`, `edit_file`, `search`, and `bash`, each registered with a JSON schema |
 | Sandbox | `rig/sandbox/` | Runs tool commands inside a throwaway Docker container; the API key never enters it |
-| Budget | `rig/core/budget.py`, `rig/core/pricing.py` | Hard caps on steps, tokens, dollars, and wall-clock time |
+| Budget | `rig/core/budget.py`, `rig/core/pricing/` | Hard caps on steps, tokens, dollars, and wall-clock time |
 | Trace | `rig/core/trace.py` | Append-only JSONL log of every request, response, and tool call |
 | Evals | `evals/` | A task ladder run against a pinned [click](https://github.com/pallets/click) checkout, with automatic grading |
 
@@ -104,9 +104,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for how changes are organised around the 
 
 ```
 rig/            the agent package
+  core/         the loop, the raw model client, budget, trace
+    pricing/    per-model prices, one JSON table per vendor
   tools/        tool implementations and the registry
-  docker/       sandbox Dockerfile
-  costs/        per-model pricing
+  sandbox/      workspace, Docker sandbox and its Dockerfile, repo snapshots
+  util/         logging and timing
   prompts/      system prompt
 evals/          task ladder, seeds, hidden tests, runner
 scripts/        entry points: run the agent, build the sandbox, read a trace

@@ -1,6 +1,7 @@
-"""The dollar cost of one model call, from a price table in dollars per million tokens.
+"""The dollar cost of one model call, from price tables in dollars per million tokens.
 
-claude.json holds Anthropic's prices; Thursday's OpenAI and OpenRouter models add their own rows.
+Each *.json file in this package is one vendor's table, keyed by model id: claude.json holds
+Anthropic's prices. Another vendor's models go in a file of their own beside it.
 A model can be priced in tiers by prompt size ("up_to_100k" / "over_100k"); the tier is chosen
 by the whole prompt and then applies to the whole call, input and output alike.
 """
@@ -10,17 +11,19 @@ from functools import cache
 from pathlib import Path
 from typing import Any
 
-from ..util.logging import get_logger
+from ...util.logging import get_logger
 
 logger = get_logger()
 
-PRICE_TABLE = Path(__file__).parent / "claude.json"
+PRICES_DIR = Path(__file__).parent
 _unpriced: set[str] = set()
 
 
 @cache
 def _table() -> dict[str, Any]:
-    data: dict[str, Any] = json.loads(PRICE_TABLE.read_text())
+    data: dict[str, Any] = {}
+    for path in sorted(PRICES_DIR.glob("*.json")):
+        data |= json.loads(path.read_text())
     return data
 
 
@@ -50,7 +53,7 @@ def price(model: str, usage: dict[str, int]) -> float:
             _unpriced.add(model)
             logger.warning(f"no price for model {model!r}; its calls count as $0 toward the budget")
         return 0.0
-    # Cache writes at the 5-minute rate: usage doesn't split writes by TTL yet (Week 3 does).
+    # Cache writes at the 5-minute rate: usage doesn't split writes by TTL yet.
     return (
         usage["input_tokens"] * r["input"]
         + usage["output_tokens"] * r["output"]

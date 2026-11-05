@@ -103,7 +103,7 @@ Everything in this ecosystem reduces to five things: a stateless next-token func
 | Coding agent | A harness whose environment is a repository and whose tools read, search, edit and run code. It works better than most agents because tests and compilers give cheap, honest feedback. | your project | A specialization |
 | Workflow engine | Code owns the control flow (a DAG or state machine) and LLM calls are steps inside it. A durable engine persists each step's result so a crashed run resumes without redoing side effects. | DBOS, Temporal, LangGraph | Fundamental, and older than LLMs |
 
-*Diagram — The vocabulary as nested layers. Rendered version: https://ai.labs-nature.com/study-plan/#/primitives*
+*Diagram — The vocabulary as nested layers. Rendered version: https://ai.labs-nature.com/study-plan/#primitives*
 
 An "agent" is the loop configured with a model, prompt, tools and stop policy; a coding agent is a harness specialized for a repository.
 
@@ -136,7 +136,7 @@ You build one Python program, `rig`. It starts as a repository agent and grows i
 
 **Targets.** Weeks 1 to 3 use [pallets/click](https://github.com/pallets/click) at tag `8.5.0`: about 12,000 lines across 16 modules in `src/click`, and 1,991 tests that finish in roughly 8 seconds — pure Python, no native deps or network needed to install or test, so it runs offline in the sandbox and stays cheap to re-run the full suite after every fix, across every task, every week. It's real production code, not a toy example, but still small enough that you can verify a fix or a grader by hand. The same codebase and the same 12-task ladder carry across Weeks 1 to 3 unchanged, so a change in pass rate, steps or cost is attributable to your harness, not to a different target. Week 4 adds [openai/openai-agents-python](https://github.com/openai/openai-agents-python) at `v0.23.1` (320 source files), large enough that retrieval has something to beat; it is also Week 11 reading. From Week 10 the target is the open web, from Week 12 a fixture folder of CSVs and PDFs, and from Week 13 a fixture inbox and calendar, then one real account.
 
-**Layout as it grows.** Week 1's `rig/` package gains one directory per capability: `providers/` (W2), `context/` (W3), `retrieval/` (W4), `gateway/` (W8), `research/` (W10), `mcp/` and `policy/` (W9, the policy service runs as its own process), `artifacts/` and `ingest/` (W12), `memory/` and `connectors/` (W13), `server/` (W14), `durable/` and `scheduler/` (W15), `browser/` (W16), `voice/` (W17), `app/` (W18).
+**Layout as it grows.** Week 1's `rig/` package gains one directory per capability: `providers/`, `core/` (the loop, agent, session, config, budget, trace), `cli/` and `sandbox/` (W2), `context/` (W3), `retrieval/` (W4), `gateway/` (W8), `research/` (W10), `mcp/` and `policy/` (W9, the policy service runs as its own process), `artifacts/` and `ingest/` (W12), `memory/` and `connectors/` (W13), `server/` (W14), `durable/` and `scheduler/` (W15), `browser/` (W16), `voice/` (W17), `app/` (W18).
 
 **Invariants that hold from Day 1.**
 
@@ -167,7 +167,7 @@ You build one Python program, `rig`. It starts as a repository agent and grows i
 | 17 | Voice loop: VAD, streaming speech-to-text, model, text-to-speech, barge-in | Talking over the user; slow turn-taking | End of speech to first audio, p50 and p95 |
 | 18 | One runtime with three modes, capability eval suites, feedback and online experiments, graduation project | A change in one mode regressing another | Per-capability pass^3; cost per success; p95 latency |
 
-*Diagram — rig v1.0 architecture, with the week each part arrives. Rendered version: https://ai.labs-nature.com/study-plan/#/rig*
+*Diagram — rig v1.0 architecture, with the week each part arrives. Rendered version: https://ai.labs-nature.com/study-plan/#rig*
 
 Requests flow right, from the loop through the context builder to the model. Every tool call flows down through the policy service, which can ask a person. Only code execution and the browser run inside the sandbox, so sandboxed code can never write the stores, the tool ledger or the grants.
 
@@ -212,34 +212,39 @@ None of this week's ideas are specific to one vendor; only the exact field names
 | File | Its one job | Reference counterpart | Day |
 |---|---|---|---|
 | `notes/wire/01..04.json` | The four raw request and response bodies of one tool round trip, saved by hand | — | Mon |
-| `rig/llm.py` | The only code that talks to the network: one request in, one parsed response out, retrying only what's safe to retry | **Starter code** below; mini-swe-agent's [`retry.py`](https://github.com/SWE-agent/mini-swe-agent/blob/04d809ceab9df28f9adaed044884180159172930/src/minisweagent/models/utils/retry.py) | Tue |
-| `rig/trace.py` | Append-only event log, one flushed JSON line per event | **Trace structure** below | Tue |
-| `rig/budget.py` | The single place that decides when a run must stop | mini-swe-agent's [`query` limit checks](https://github.com/SWE-agent/mini-swe-agent/blob/04d809ceab9df28f9adaed044884180159172930/src/minisweagent/agents/default.py#L130-L152) | Tue (shape), Thu (real) |
-| `rig/loop.py` | `run_agent()`: owns `messages`; calls the model, runs tools, decides when to stop | mini-swe-agent's [`DefaultAgent.run`](https://github.com/SWE-agent/mini-swe-agent/blob/04d809ceab9df28f9adaed044884180159172930/src/minisweagent/agents/default.py#L88-L123) | Tue |
+| `rig/core/llm.py` | The only code that talks to the network: one request in, one parsed response out, retrying only what's safe to retry | **Starter code** below; mini-swe-agent's [`retry.py`](https://github.com/SWE-agent/mini-swe-agent/blob/04d809ceab9df28f9adaed044884180159172930/src/minisweagent/models/utils/retry.py) | Tue |
+| `rig/core/trace.py` | Append-only event log, one flushed JSON line per event | **Trace structure** below | Tue |
+| `rig/core/budget.py` | The single place that decides when a run must stop | mini-swe-agent's [`query` limit checks](https://github.com/SWE-agent/mini-swe-agent/blob/04d809ceab9df28f9adaed044884180159172930/src/minisweagent/agents/default.py#L130-L152) | Tue (shape), Thu (real) |
+| `rig/core/loop.py` | `run_agent()`: owns `messages`; calls the model, runs tools, decides when to stop | mini-swe-agent's [`DefaultAgent.run`](https://github.com/SWE-agent/mini-swe-agent/blob/04d809ceab9df28f9adaed044884180159172930/src/minisweagent/agents/default.py#L88-L123) | Tue |
 | `rig/tools/__init__.py` | Registry, dispatch, truncation: every failure becomes an `is_error` result | mini-swe-agent's [`parse_toolcall_actions`](https://github.com/SWE-agent/mini-swe-agent/blob/04d809ceab9df28f9adaed044884180159172930/src/minisweagent/models/utils/actions_toolcall.py#L30) | Tue |
 | `rig/tools/fs.py` | `list_files`, `read_file` (Tue), `edit_file` and the path jail (Thu) | **The first five tools** below | Tue, Thu |
-| `rig/workspace.py` | `ws`: the checkout root and name (Tue); the container lifecycle and `exec_prefix` (Wed) | mini-swe-agent's [`LocalEnvironment`](https://github.com/SWE-agent/mini-swe-agent/blob/04d809ceab9df28f9adaed044884180159172930/src/minisweagent/environments/local.py#L24) | Tue, Wed |
+| `rig/sandbox/workspace.py` | `ws`: the checkout root and name (Tue); the container lifecycle and `exec_prefix` (Wed) | mini-swe-agent's [`LocalEnvironment`](https://github.com/SWE-agent/mini-swe-agent/blob/04d809ceab9df28f9adaed044884180159172930/src/minisweagent/environments/local.py#L24) | Tue, Wed |
 | `rig/tools/search.py`, `rig/tools/shell.py` | `search` (ripgrep) and `bash`, both run inside the container | mini-swe-agent's [`_run`](https://github.com/SWE-agent/mini-swe-agent/blob/04d809ceab9df28f9adaed044884180159172930/src/minisweagent/environments/local.py#L72-L92) | Wed |
-| `docker/Dockerfile.sandbox` | The sandbox image | **Sandbox from Day 1** below | Wed |
+| `rig/sandbox/Dockerfile.sandbox` | The sandbox image | **Sandbox from Day 1** below | Wed |
 | `evals/run_evals.py` + `evals/tasks/week1.yaml` | Snapshot, seed, run, grade in the container, one line to `results.jsonl` | **Task ladder and initial eval set** below | Sat |
+
+Group the modules by layer from the first day: `core/` for the agent itself, `sandbox/` for where code runs, `tools/` for what the model can call. Later weeks then add folders (Week 2 adds `providers/` and `cli/`) instead of moving files.
 
 ```text
 rig/
   pyproject.toml            # deps: httpx, pyyaml, pytest (for rig's own tests)
   rig/
     cli.py                  # rig run --repo PATH --task FILE_OR_TEXT --budget-usd 0.50
-    llm.py                  # raw Messages API client: retries, backoff, usage
-    loop.py                 # run_agent(): the loop, stop conditions
-    budget.py               # steps / tokens / dollars / wall clock
-    trace.py                # append-only JSONL writer
-    workspace.py            # snapshot creation, container lifecycle, path jail
+    core/                   # the agent itself
+      llm.py                # raw Messages API client: retries, backoff, usage
+      loop.py               # run_agent(): the loop, stop conditions
+      budget.py             # steps / tokens / dollars / wall clock
+      trace.py              # append-only JSONL writer
+      pricing/              # price per model: the code, plus one JSON table per vendor (claude.json)
+    sandbox/                # where code runs
+      workspace.py          # snapshot creation, container lifecycle, path jail
+      Dockerfile.sandbox
     tools/
       __init__.py           # registry, dispatch, truncation
       fs.py                 # list_files, read_file, edit_file
       search.py             # search (ripgrep)
       shell.py              # bash
     prompts/system.md
-  docker/Dockerfile.sandbox
   evals/
     tasks/week1.yaml        # id, prompt, seed, grader
     seeds/                  # one patch per seeded bug (never shown to the agent)
@@ -297,7 +302,7 @@ One process, one thread, no framework:
 | Mon | 1.5 h | A throwaway script, one tool, by hand — see the Monday walkthrough just below | One full tool round trip over raw `httpx`; the four JSON bodies saved under `notes/wire/` |
 | Tue | 2 h | `llm.py`, `trace.py`, `budget.py`'s shape, `loop.py`, `list_files`, `read_file`; clone click; run the first prompt | The agent answers the read-only trace task; `runs/<id>/trace.jsonl` holds one event per model call and tool call |
 | Wed | 2 h | `search`, `bash`, the sandbox container | The agent runs the test suite in the container and reports counts; `sleep 999` is killed at the timeout and the loop carries on |
-| Thu | 2 h | `edit_file`, `budget.py` for real, `max_tokens` handling, tool error paths; read mini-swe-agent | The agent fixes task T04 end to end; an artificially tiny budget ends the run with status `budget:*` |
+| Thu | 2 h | `edit_file`, `budget.py` for real, `max_tokens` handling, tool error paths; read mini-swe-agent | The agent fixes task T04 end to end; an artificially tiny budget ends the run with status `error.budget.*` |
 | Fri | 1.5 h | The four experiments on T04 to T09 | `notes/week1-experiments.md` comparing variants on the same tasks |
 | Sat | 3 to 4 h | `evals/run_evals.py`; run all 12 tasks 3 times | A baseline table: pass rate, mean steps, tokens and dollars per task |
 | Sun | 2 to 3 h | Read every failed trajectory; label failures; attempt the checkpoint | A failure taxonomy with counts; checkpoint passed or a redo list |
@@ -340,9 +345,9 @@ r2 = httpx.post(URL, headers=HEADERS, json=body).json()          # save body -> 
 **Why.** Grading a read-only answer against a known key proves the loop, the client and the trace are right before the agent is allowed to change a single file. Building `budget.py`'s interface now, even with limits that never trip, means `loop.py` won't change shape on Thursday.
 
 1. Lay out the repo as in the tree in **This week's objective and target layout** above.
-2. Write `rig/llm.py`: the raw HTTP client, and the only thing in the codebase that talks to the network. Its whole job is one request in, one parsed response out, retrying only the failures that are safe to retry — it knows nothing about tools, messages history, or the loop. See **Starter code** below for the exact retry policy — type it in, don't paste.
-3. Write `rig/trace.py`: the append-only event log every later week's metrics come from — one JSON line per model call and tool call, flushed immediately so a crash still leaves a readable prefix. Also put `rig/budget.py`'s shape in place: the single place that decides when a run has to stop (steps, tokens, dollars, wall clock). Both are sketched in **Starter code**. Field names follow **Trace structure** below.
-4. Write `rig/loop.py`: the agent itself. It owns the one `messages` list nothing else may append to, and on each turn decides whether to call the model again, run the tools it asked for, or stop — see **Starter code** below, and compare with mini-swe-agent's [`run`](https://github.com/SWE-agent/mini-swe-agent/blob/04d809ceab9df28f9adaed044884180159172930/src/minisweagent/agents/default.py#L88-L123), which is the same loop with exceptions instead of a stop-reason check.
+2. Write `rig/core/llm.py`: the raw HTTP client, and the only thing in the codebase that talks to the network. Its whole job is one request in, one parsed response out, retrying only the failures that are safe to retry — it knows nothing about tools, messages history, or the loop. See **Starter code** below for the exact retry policy — type it in, don't paste.
+3. Write `rig/core/trace.py`: the append-only event log every later week's metrics come from — one JSON line per model call and tool call, flushed immediately so a crash still leaves a readable prefix. Also put `rig/budget.py`'s shape in place: the single place that decides when a run has to stop (steps, tokens, dollars, wall clock). Both are sketched in **Starter code**. Field names follow **Trace structure** below.
+4. Write `rig/core/loop.py`: the agent itself. It owns the one `messages` list nothing else may append to, and on each turn decides whether to call the model again, run the tools it asked for, or stop — see **Starter code** below, and compare with mini-swe-agent's [`run`](https://github.com/SWE-agent/mini-swe-agent/blob/04d809ceab9df28f9adaed044884180159172930/src/minisweagent/agents/default.py#L88-L123), which is the same loop with exceptions instead of a stop-reason check.
 5. Write `rig/tools/__init__.py` from **Starter code** (the `@tool` registry, `run_tool`, `truncate`), then implement `list_files` (lets the model see what exists before it goes looking) and `read_file` (numbered lines, so it can cite a location precisely) from the contracts in **The first five tools** below.
 6. Write a minimal `workspace.py` from the Tuesday shape in **Starter code**: just `root` and `name`, so `loop.py` and the tools have a `ws`. Then `git -C reading/click archive 8.5.0` into `workspaces/` and point it there — a plain checkout, no sandbox yet.
 7. Run **The first prompt to give your agent** below, read-only, and grade yourself against the answer key given there.
@@ -373,15 +378,15 @@ Test: `test_tools_fs.py` gains the path jail — `resolve(ws, "../outside")` rai
 **Why.** `edit_file`'s uniqueness check is your main defense against silent wrong edits: a non-unique match means the model's picture of the file is already wrong. Real budgets are what let you run an agent unattended. Reading mini-swe-agent last, after building your own, shows how much of what you built is essential — it has one tool and no permission model, and still scores well.
 
 1. Implement `edit_file` exactly as given in **Starter code**; the uniqueness check is the whole point of it, don't loosen it.
-2. Finish `budget.py` for real: steps, input tokens, dollars and wall clock each raise `BudgetExceeded(<reason>)` from `check()`; fill in a price table from your provider's current pricing page for `charge()`. mini-swe-agent does the same checks in [`query`](https://github.com/SWE-agent/mini-swe-agent/blob/04d809ceab9df28f9adaed044884180159172930/src/minisweagent/agents/default.py#L130-L152), raising `LimitsExceeded` and `TimeExceeded` ([`exceptions.py`](https://github.com/SWE-agent/mini-swe-agent/blob/04d809ceab9df28f9adaed044884180159172930/src/minisweagent/exceptions.py)).
+2. Finish `budget.py` for real: steps, input tokens, dollars and wall clock each raise `BudgetExceeded(<reason>)` from `check()`; fill in a price table from your provider's current pricing page for `charge()`, as a JSON file in `rig/core/pricing/` (one file per vendor, so a second provider adds a file rather than code). mini-swe-agent does the same checks in [`query`](https://github.com/SWE-agent/mini-swe-agent/blob/04d809ceab9df28f9adaed044884180159172930/src/minisweagent/agents/default.py#L130-L152), raising `LimitsExceeded` and `TimeExceeded` ([`exceptions.py`](https://github.com/SWE-agent/mini-swe-agent/blob/04d809ceab9df28f9adaed044884180159172930/src/minisweagent/exceptions.py)).
 3. Add `max_tokens` handling in `loop.py` (the `TRUNCATED` branch, already shown in **Starter code**) and confirm every tool failure becomes an `is_error` result rather than an exception that escapes (also shown there).
 4. Point the agent at task T04 end to end — fix, run tests, stop — see **Task ladder and initial eval set** below for the exact bug and grader.
-5. Set an artificially tiny budget (for example `max_steps=2`) and confirm the run ends with status `budget:steps`, not an exception.
+5. Set an artificially tiny budget (for example `max_steps=2`) and confirm the run ends with status `error.budget.steps`, not an exception.
 6. Read **Read: mini-swe-agent** below and trace the path given there; answer its seven questions in your notes.
 
-Tests: `test_edit_file.py` — an `old_text` matching twice raises and leaves the file unchanged; empty `old_text` creates a file but refuses to overwrite one. `test_loop.py` with a scripted fake standing in for `llm.call` — a `max_tokens` response with a tool call runs no tool and sends `TRUNCATED` back; a tool that raises becomes an `is_error` result; `max_steps=2` ends with status `budget:steps`.
+Tests: `test_edit_file.py` — an `old_text` matching twice raises and leaves the file unchanged; empty `old_text` creates a file but refuses to overwrite one. `test_loop.py` with a scripted fake standing in for `llm.call` — a `max_tokens` response with a tool call runs no tool and sends `TRUNCATED` back; a tool that raises becomes an `is_error` result; `max_steps=2` ends with status `error.budget.steps`.
 
-**Done when:** T04 passes its grader on a live run, and the tiny-budget run ends with status `budget:steps`.
+**Done when:** T04 passes its grader on a live run, and the tiny-budget run ends with status `error.budget.steps`.
 
 ### Friday — break your own agent on purpose.
 **Goal.** Numbers on which of this week's design choices actually mattered.
@@ -405,14 +410,16 @@ Run the four experiments in **Experiments (Friday)** below against T04 to T09 (e
 ```python
 for task in load_tasks("evals/tasks/week1.yaml"):
     for rep in range(args.runs):
-        snap = create_snapshot("reading/click", "8.5.0", seed=task.seed)   # archive -> patch -> git init
+        snap = create_snapshot("reading/click", "8.5.0", seed=task.seed)   # archive -> git init -> patch -> commit
         with Workspace(snap, ...) as ws:
             result = run_agent(task.prompt, ws=ws, ...)
             verdict = grade(task, result, ws)                            # inside the same container
         append_jsonl("results.jsonl", {"task": task.id, "rep": rep, **verdict, **result.totals})
 ```
 
-Test: `test_snapshot.py` — a snapshot has exactly one commit, and a seed patch is applied before that commit.
+Run `git init` before `git apply`, never after: snapshots live under `runs/`, inside rig's own repository, and a `git apply` run there works relative to rig's root, silently skips every path in the snapshot, and still exits 0. Then check the seed actually landed (`git apply --check -R` succeeds) and fail if not; otherwise every seeded task runs on a clean tree and "passes" with an empty diff.
+
+Test: `test_snapshot.py` — a snapshot has exactly one commit, and a seed patch is applied before that commit, including when the snapshot is created inside another git repository.
 
 **Done when:** `python evals/run_evals.py --runs 3` produces 36 lines in `results.jsonl`, and `report.py` prints pass@1 and pass^3 per task.
 
@@ -430,7 +437,7 @@ Test: `test_snapshot.py` — a snapshot has exactly one commit, and a seed patch
 ## Starter code
 The code below ran against click `8.5.0` with a scripted fake model standing in for `llm.call`: tool pairing, unknown tools, `max_tokens` truncation, the path jail, ambiguous edits, command timeouts and budget exhaustion all behaved as described. Type it in yourself rather than pasting it; the point is to own every line.
 
-`rig/llm.py`, a raw client with the retry policy the official SDK uses. Shown against Anthropic's endpoint — on OpenAI, swap `API_URL` for `https://api.openai.com/v1/responses` (or `/v1/chat/completions`) and the header for `"Authorization": f"Bearer {os.environ['OPENAI_API_KEY']}"`; the retry/backoff logic below is otherwise identical:
+`rig/core/llm.py`, a raw client with the retry policy the official SDK uses. Shown against Anthropic's endpoint — on OpenAI, swap `API_URL` for `https://api.openai.com/v1/responses` (or `/v1/chat/completions`) and the header for `"Authorization": f"Bearer {os.environ['OPENAI_API_KEY']}"`; the retry/backoff logic below is otherwise identical:
 
 ```python
 import os, random, time
@@ -439,12 +446,15 @@ import httpx
 API_URL = "https://api.anthropic.com/v1/messages"
 RETRYABLE = {408, 409, 429, 500, 502, 503, 504, 529}
 
-class LLMError(Exception): ...
+class LLMError(Exception):
+    def __init__(self, message: str, status: str = "connection"):
+        super().__init__(message)
+        self.status = status  # an HTTP status ("429"), or "connection": the run's error.llm.<cause>
 
 def call(body: dict, *, timeout: float = 300.0, max_retries: int = 5) -> tuple[dict, dict]:
     headers = {"x-api-key": os.environ["ANTHROPIC_API_KEY"],
                "anthropic-version": "2023-06-01", "content-type": "application/json"}
-    last_error = ""
+    last_error, last_status = "", "connection"
     for attempt in range(max_retries + 1):
         started, wait = time.monotonic(), None
         try:
@@ -456,23 +466,23 @@ def call(body: dict, *, timeout: float = 300.0, max_retries: int = 5) -> tuple[d
                 return r.json(), {"attempts": attempt + 1,
                                   "latency_s": round(time.monotonic() - started, 3),
                                   "request_id": r.headers.get("request-id")}
-            last_error = f"HTTP {r.status_code}: {r.text[:300]}"
+            last_error, last_status = f"HTTP {r.status_code}: {r.text[:300]}", str(r.status_code)
             hint = r.headers.get("x-should-retry")
             if hint == "false" or (r.status_code not in RETRYABLE and hint != "true"):
-                raise LLMError(last_error)  # a 400 is your bug; retrying will not fix it
+                raise LLMError(last_error, last_status)  # a 400 is your bug; retrying won't fix it
             try:
                 wait = float(r.headers.get("retry-after", ""))
             except ValueError:
                 pass
         if attempt < max_retries:
             time.sleep(wait if wait is not None else min(60.0, 2 ** attempt) * random.uniform(0.5, 1.5))
-    raise LLMError(f"gave up after {max_retries + 1} attempts: {last_error}")
+    raise LLMError(f"gave up after {max_retries + 1} attempts: {last_error}", last_status)
 ```
 
-`rig/workspace.py`, Tuesday's shape: the object every tool function and `loop.py` call `ws`, passed in rather than reached for as global state. Today it's nothing but the checkout — `root` for the path jail every file tool checks against, `name` to fill the system prompt's `{repo}` — with `exec_prefix` arriving Wednesday once there's a container to exec into:
+`rig/sandbox/workspace.py`, Tuesday's shape: the object every tool function and `loop.py` call `ws`, passed in rather than reached for as global state. Today it's nothing but the checkout — `root` for the path jail every file tool checks against, `name` to fill the system prompt's `{repo}` — with `exec_prefix` arriving Wednesday once there's a container to exec into:
 
 ```python
-# rig/workspace.py (Tuesday — step 6)
+# rig/sandbox/workspace.py (Tuesday — step 6)
 from pathlib import Path
 
 class Workspace:
@@ -481,7 +491,7 @@ class Workspace:
         self.name = name   # repo's display name, interpolated into the system prompt as {repo}
 ```
 
-`rig/loop.py`, the whole agent. The `ws` argument `run_agent` takes, and forwards into every tool call via `run_tool`, is the `Workspace` built just above:
+`rig/core/loop.py`, the whole agent. The `ws` argument `run_agent` takes, and forwards into every tool call via `run_tool`, is the `Workspace` built just above:
 
 ```python
 import time
@@ -491,7 +501,7 @@ from rig.budget import Budget, BudgetExceeded
 from rig.tools import TOOLS, run_tool
 import rig.tools.fs, rig.tools.search, rig.tools.shell  # noqa: F401  (registers the tools)
 
-SYSTEM = (Path(__file__).parent / "prompts" / "system.md").read_text()
+SYSTEM = (Path(__file__).parent.parent / "prompts" / "system.md").read_text()
 TRUNCATED = ("Not executed: your response hit max_tokens, so these arguments may be "
              "truncated. Re-issue the call with complete arguments.")
 
@@ -499,7 +509,7 @@ def run_agent(task: str, *, ws, model: str, budget: Budget, trace, max_tokens: i
     messages = [{"role": "user", "content": task}]
     schemas = [t.schema for t in TOOLS.values()]
     trace.event("run.start", task=task, model=model, tools=list(TOOLS))
-    status = "unknown"
+    status = "error.internal"
     try:
         while True:
             budget.check()  # raises BudgetExceeded("steps" | "input_tokens" | "usd" | "wall_clock")
@@ -512,8 +522,9 @@ def run_agent(task: str, *, ws, model: str, budget: Budget, trace, max_tokens: i
             messages.append({"role": "assistant", "content": resp["content"]})
 
             calls = [b for b in resp["content"] if b["type"] == "tool_use"]
-            if not calls:
-                status = resp["stop_reason"]  # end_turn, max_tokens, refusal, ...
+            if not calls:  # an answer, or a turn that ended without one
+                stop = resp["stop_reason"]  # end_turn, max_tokens (answer cut off), refusal, ...
+                status = "success" if stop == "end_turn" else f"stopped.{stop}"
                 break
 
             results = []  # one tool_result per tool_use id, or the next request is rejected
@@ -531,10 +542,10 @@ def run_agent(task: str, *, ws, model: str, budget: Budget, trace, max_tokens: i
                                 "content": out, "is_error": is_error})
             messages.append({"role": "user", "content": results})
     except BudgetExceeded as e:
-        status = f"budget:{e}"
+        status = f"error.budget.{e}"  # error.budget.steps, error.budget.usd, ...
     except llm.LLMError as e:
-        status = "llm_error"
-        trace.event("error", where="llm", message=str(e))
+        status = f"error.llm.{e.status}"  # error.llm.429, error.llm.connection, ...
+        trace.event("error", where="llm", status=status, message=str(e))
     last = messages[-1]
     final = "".join(b["text"] for b in last["content"] if b.get("type") == "text") \
         if last["role"] == "assistant" else ""
@@ -544,10 +555,10 @@ def run_agent(task: str, *, ws, model: str, budget: Budget, trace, max_tokens: i
 
 The shapes above (`resp["stop_reason"]`, `body["system"]`, a `tool_use` block's `id`/`name`/`input`, a `tool_result` keyed by `tool_use_id`) are Anthropic's field names — use the table in Concepts to translate if you're on OpenAI: read `resp["choices"][0]["finish_reason"]` instead of `stop_reason`, put system text in a `developer`-role message instead of a top-level `system` key, read each tool call from `resp["choices"][0]["message"]["tool_calls"]` (`id`, `function.name`, `function.arguments` as a JSON string you parse), and append the result as `{"role": "tool", "tool_call_id": c["id"], "content": out}` instead of a `tool_result` block. The control flow — collect calls, run them, append results, loop until none remain — is identical either way.
 
-`rig/trace.py` and `rig/budget.py`, the two accounting modules `loop.py` above already calls into. Deliberately simple — no engineering surprises here, just get the shape right so `loop.py` doesn't change later, then fill in `check()`'s thresholds and `charge()`'s price table yourself:
+`rig/core/trace.py` and `rig/core/budget.py`, the two accounting modules `loop.py` above already calls into. Deliberately simple — no engineering surprises here, just get the shape right so `loop.py` doesn't change later, then fill in `check()`'s thresholds and `charge()`'s price table yourself:
 
 ```python
-# rig/trace.py
+# rig/core/trace.py
 import itertools, json, time
 
 class Trace:
@@ -559,7 +570,7 @@ class Trace:
         self.f.write(json.dumps(rec) + "\n")
         self.f.flush()  # one line per event: a crash still leaves a readable prefix
 
-# rig/budget.py
+# rig/core/budget.py
 import time
 from dataclasses import dataclass, field
 
@@ -591,7 +602,7 @@ class Budget:
         return {"steps": self.steps, "input_tokens": self.input_tokens, "usd": round(self.usd, 4)}
 ```
 
-On Tuesday, `check()` tripping is fine to leave untested (your limits are generous); Thursday is when you set them tight enough to actually trip and confirm `status` comes back as `budget:steps` or similar, not an unhandled exception.
+On Tuesday, `check()` tripping is fine to leave untested (your limits are generous); Thursday is when you set them tight enough to actually trip and confirm `status` comes back as `error.budget.steps` or similar, not an unhandled exception.
 
 `rig/tools/__init__.py`, registry and dispatch. Every failure becomes an `is_error` result, never an exception that escapes the loop:
 
@@ -640,10 +651,10 @@ def truncate(s: str) -> str:
 
 *Reader variation:* the raw dicts above are the fastest way to see the wire shape, but if you'd rather have typed, validated tool schemas, defining `ToolPropertySchema`/`ToolInputSchema`/`Tool` as small Pydantic models works just as well — dump one with `.model_dump(exclude=["func"])` to get the same JSON shape `tools` expects on the wire. Either representation satisfies the rest of this week's contracts; pick whichever you'll trust yourself to keep correct as the tool count grows.
 
-`rig/workspace.py`, Wednesday's addition: once the sandbox container exists, `exec_prefix` is the argv prefix that turns any command into a command run inside this run's container, built once in the constructor from the container's name:
+`rig/sandbox/workspace.py`, Wednesday's addition: once the sandbox container exists, `exec_prefix` is the argv prefix that turns any command into a command run inside this run's container, built once in the constructor from the container's name:
 
 ```python
-# rig/workspace.py (Wednesday — adds the container)
+# rig/sandbox/workspace.py (Wednesday — adds the container)
 class Workspace:
     def __init__(self, root: Path, name: str, run_id: str):
         self.root = root
@@ -719,7 +730,7 @@ def bash(ws, command, timeout_s=120):
 The offline install step below was verified against click `8.5.0`. Without `--no-build-isolation`, pip tries to download the build backend and fails on a network-less container.
 
 ```dockerfile
-# docker/Dockerfile.sandbox
+# rig/sandbox/Dockerfile.sandbox
 FROM python:3.13-slim
 RUN apt-get update && apt-get install -y --no-install-recommends git ripgrep \
     && rm -rf /var/lib/apt/lists/*
@@ -886,7 +897,7 @@ Open these first, in this order (pinned to commit `04d809c`):
 - **Timeouts at two layers:** the HTTP client (300 s) and the tool (inside the container, plus a host-side backstop). A missing inner timeout leaves orphaned processes.
 - **Retries only where safe.** Model calls are retried because they have no side effects, even though a timed-out request may still be billed. Tool calls are never retried by the harness; the model decides, because the harness cannot know whether `bash` mutated state.
 - **Rate limits.** Honour `retry-after` on 429 and 529. Jittered exponential backoff stops parallel eval runs from retrying in lockstep.
-- **Budgets as statuses.** `budget:usd` is a result you count, not a crash.
+- **Budgets as statuses.** `error.budget.usd` is a result you count, not a crash.
 - **Secrets.** The container gets no host environment. The API key never enters the sandbox; Week 9 makes that a tested property.
 - **Permissions.** The path jail plus `--network none` are your Week 1 permission model. Write down what they do not cover (CPU time, disk fill, reading other files in the bind mount).
 
@@ -914,6 +925,7 @@ Every pi link on this page is pinned to commit `136b87e` (2026-10-23), so line n
 
 ## Concepts
 - **Three layers.** Provider adapter (wire format to a normalized message and event type), runtime (the loop, events, hooks, cancellation), harness (tools, prompt assembly, sessions, UI). Most frameworks blur these; pi keeps them in separate packages — [`packages/ai`](https://github.com/earendil-works/pi/tree/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai), [`packages/agent`](https://github.com/earendil-works/pi/tree/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent), [`packages/coding-agent`](https://github.com/earendil-works/pi/tree/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent) — and the split is a real dependency rule, not folder naming: the runtime never imports a provider implementation ([`sdk.ts` L43–46](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/sdk.ts#L43-L46) says so in a comment).
+- **Provider-neutral messages.** rig owns its message types (user text; an assistant message holding text, thinking and tool calls; one tool result per call), and each provider adapter translates them to its wire format and back. The runtime, the session log and the trace then never see a vendor's JSON, and moving from Anthropic to OpenAI or OpenRouter is a constructor argument. pi works the same way: [`types.ts` L422–659](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/types.ts#L422-L659) defines `TextContent`, `ThinkingContent`, `ToolCall`, `UserMessage`, `AssistantMessage` and `ToolResultMessage`, and every file in `packages/ai/src/api/` converts to and from them. OpenRouter, vLLM and Ollama all accept OpenAI's [Chat Completions](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create) format, so one adapter with a configurable `base_url` covers all of them.
 - **Events, not return values.** A loop that yields `turn_start`, `message_delta`, `tool_start`, `tool_end`, `turn_end` lets the CLI, the trace writer and a future UI all subscribe without touching the loop. Anthropic's API already streams this way — see [Streaming Messages](https://platform.claude.com/docs/en/build-with-claude/streaming); pi's own event union is [`AgentEvent`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/types.ts#L516).
 - **Parallel tool calls with ordered results.** Execute concurrently, append results in the order the model issued the calls. Order keeps transcripts deterministic, which matters for replay and for prompt caching next week. In Python that's [`concurrent.futures`](https://docs.python.org/3/library/concurrent.futures.html): `Executor.map` preserves submission order, `as_completed` does not.
 - **Same-file writes must serialize** even when everything else runs in parallel.
@@ -921,87 +933,111 @@ Every pi link on this page is pinned to commit `136b87e` (2026-10-23), so line n
 - **Steering versus follow-up.** A message typed mid-run can be injected after the current tool batch (steering) or held until the agent would otherwise stop (follow-up).
 - **Edit robustness.** Line endings, trailing whitespace, tabs versus spaces, and the trade-off between exact matching (safe, brittle) and fuzzy matching (forgiving, can edit the wrong place).
 - **Sessions as append-only logs.** A JSONL of entries with `id` and `parentId` gives resume, branching and "undo" without ever rewriting history. Your own Claude Code session files under `~/.claude/projects/` are a live example of the pattern.
+- **Commands, frontends and layered config.** Everything a user can ask the harness to do from the command line (run, resume, fork, change a setting) is a named subcommand: `rig config set model ...`. Commands typed inside a running session (`/steer` now, `/config set model ...` once the interactive shell exists) are a second, smaller set with their own handler, the way Claude Code parses its command-line flags in one place and its [`/` commands](https://code.claude.com/docs/en/slash-commands) in another, and pi has [`parseArgs`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/cli/args.ts#L72) beside its slash commands. Both sets call the same core functions (`SessionLog`, `config.set`), so only the thin parsing layer is written twice. Settings come from layered files, lowest first: built-in defaults, a user file, a project file, environment variables, then command-line flags. Claude Code ([settings](https://code.claude.com/docs/en/settings)) and pi ([`settings-manager.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/settings-manager.ts#L142-L147)) both work this way, so a project can pin a model while you keep your own defaults.
 
 ## This week's objective and target layout
-**Objective.** By Sunday, rig v0.2 is a CLI that streams the model's output as it arrives, survives Ctrl-C at any moment with a transcript the API still accepts, takes steering messages mid-run, resumes or forks any past session, and edits files without silently guessing — and scores no worse than v0.1 on T01–T12.
+**Objective.** By Sunday, rig v0.2 is a CLI that streams the model's output as it arrives, survives Ctrl-C at any moment with a transcript the API still accepts, takes steering messages mid-run, resumes or forks any past session, edits files without silently guessing, runs on Anthropic, OpenAI or OpenRouter by changing one flag, and remembers settings across sessions through `rig config` — and scores no worse than v0.1 on T01–T12.
 
-**What changes.** Week 1's `loop.py` does three jobs at once: it talks to the API, runs the loop, and handles every side effect (trace, budget, tools). This week you pull those apart into three layers, mirroring pi file for file: The loop module becomes a stateful class this week, so **rename `loop.py` to `agent.py`** and wrap its state in an `Agent` class (pi's `agent.ts` is the model); keep `run_agent(task, ws=..., model=..., budget=..., trace=...)` as a three-line function that builds an `Agent` and returns its `run()` result. If you already built Week 1's loop as an `Agent` class in `agent.py`, there's nothing to rename.
+**What changes.** Week 1's `loop.py` does three jobs at once: it talks to the API, runs the loop, and handles every side effect (trace, budget, tools). This week you pull those apart into three layers, mirroring pi file for file: The loop module becomes a stateful class this week, so **rename `loop.py` to `agent.py`** and wrap its state in an `Agent` class (pi's `agent.ts` is the model). An `Agent` is a session, not a single task: the constructor takes what lasts for the whole session (workspace, provider, budget, trace, and any earlier messages), and `run(task)` appends one prompt to that same transcript, the way pi's `agent.prompt(text)` does. Keep `run_agent(task, ws=..., model=..., budget=..., trace=...)` as a three-line function that returns `Agent(ws, ...).run(task)`. If you already built Week 1's loop as an `Agent` class in `agent.py`, there's nothing to rename. The provider layer is also where rig stops being Anthropic-shaped: Week 1 builds Anthropic's JSON and reads it back directly; from this week the runtime speaks rig's own message types, and only the files in `providers/` know any wire format.
 
 | rig file | Layer | Its one job | pi's counterpart | Day |
 |---|---|---|---|---|
-| `providers/base.py` | provider | `Event` types and the `Provider` protocol: one method, `stream(request)` | [`StreamFn`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/types.ts#L33) | Tue |
-| `providers/anthropic.py` | provider | Official SDK, streaming; SDK events in, rig `Event`s out | [`anthropic-messages.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/anthropic-messages.ts#L576) | Tue |
+| `providers/types.py` | provider | rig's own message types, `Context`, `Event` types and the `Provider` protocol: one method, `stream(context)` | [`StreamFn`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/types.ts#L33), [`types.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/types.ts#L422-L659) | Tue |
+| `providers/anthropic.py` | provider | Official SDK, streaming; rig `Context` in as a Messages API body, SDK events out as rig `Event`s | [`anthropic-messages.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/anthropic-messages.ts#L576) | Tue |
+| `providers/openai_chat.py` | provider | Official `openai` SDK, Chat Completions, streaming; one class for OpenAI, OpenRouter and local servers, chosen by `base_url` | [`openai-completions.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/openai-completions.ts#L309) | Thu |
 | `providers/fake.py` | provider | Scripted events, no network, for deterministic tests | [`faux.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/providers/faux.ts#L705) | Tue |
-| `runtime.py` | runtime | The loop as a generator of events; hooks; parallel tools; abort; steering | [`agent-loop.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L172) | Tue–Wed |
-| `agent.py` (shrinks) | runtime wrapper | Owns `messages`, the queues and the hooks; iterates `runtime.run()`; writes trace | [`agent.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent.ts#L194) | Tue–Wed |
-| `session.py` | harness | Append-only JSONL log; resume and fork | [`session-manager.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/session-manager.ts#L1204) | Wed |
-| `cli.py` | harness | `rig run`, `rig resume`, `rig fork`; Ctrl-C; reads steer input | [`agent-session.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/agent-session.ts#L1873) | Wed |
+| `core/runtime.py` | runtime | The loop as a generator of events; hooks; parallel tools; abort; steering | [`agent-loop.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L172) | Tue–Wed |
+| `core/agent.py` (shrinks) | runtime wrapper | Owns `messages`, the queues and the hooks; iterates `runtime.run()`; writes trace | [`agent.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent.ts#L194) | Tue–Wed |
+| `core/session.py` | harness | Append-only JSONL log; resume and fork | [`session-manager.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/session-manager.ts#L1204) | Wed |
+| `cli/app.py`, `cli/sessions.py`, `cli/config_cmd.py` | harness | The `rig` subcommands (`run`, `resume`, `fork`, `show`, `config ...`) as one [Typer](https://typer.tiangolo.com/) app, one module per command group; each is a thin layer over `session.py` and `config.py` | pi's [`parseArgs`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/cli/args.ts#L72) | Wed |
+| `core/config.py` | harness | Layered `config.json` loading; `get`, `set`, `unset` and `origin` per scope | pi's [`SettingsManager`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/settings-manager.ts#L272) | Wed |
+| `cli/main.py` | harness | Runs the app with the terminal's hooks: Ctrl-C to `agent.abort()`, typed lines to `steer` / `follow_up` | [`agent-session.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/agent-session.ts#L1873) | Wed |
 | `tools/fs.py` (extend) | harness | `edit_file` v2 | [`edit-diff.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/tools/edit-diff.ts#L300) | Wed |
 
 ```text
 rig/
   providers/
-    __init__.py
-    base.py
+    __init__.py     # get_provider("anthropic" | "openai" | "openrouter", model): the one place a provider is chosen
+    types.py        # rig's own message and event types; no vendor shapes
     anthropic.py
+    openai_chat.py  # OpenAI, OpenRouter, vLLM, Ollama: one wire format, different base_url
     fake.py
-  runtime.py
-  agent.py          # Week 1's loop.py, renamed: a thin stateful wrapper around runtime.run()
-  session.py
-  cli.py            # scripts/run_agent.py becomes its `run` subcommand
+  core/             # Week 1's agent layer: loop.py becomes agent.py; runtime, session, config are new
+    runtime.py
+    agent.py        # Week 1's loop.py, renamed: a thin stateful wrapper around runtime.run()
+    session.py
+    config.py       # defaults < ~/.config/rig/config.json < .rig/config.json < RIG_* env < flags
+    pricing/        # Week 1's price tables: add openai.json beside claude.json for the models you run
+  cli/              # the rig command line
+    app.py          # the root Typer app, one module per command group
+    sessions.py     # run, resume, fork, show; scripts/run_agent.py becomes `run`
+    config_cmd.py   # rig config get|set|unset|list
+    main.py         # entry point: Ctrl-C and typed lines
+  sandbox/          # unchanged from Week 1: workspace, snapshot, Dockerfile
   tools/fs.py       # edit_file v2
   llm.py            # Week 1's raw client: kept for reference, no longer on the live path
 evals/tasks/week1.yaml   # T13–T16 appended here: one growing regression suite
 evals/hidden/            # their hidden tests
 notes/week2-experiments.md
-tests/test_runtime.py, test_abort.py, test_edit_file_v2.py, test_session.py
+tests/test_runtime.py, test_providers.py, test_abort.py, test_edit_file_v2.py, test_session.py, test_config.py
 ```
+
+Keep the layers Week 1 started and add two, as pi splits `ai`, `agent` and `coding-agent`: the provider layer in `providers/` and the command line in `cli/`, beside `core/` (the loop and everything with state) and `sandbox/` (where code runs). Later weeks name a new file by its own name; put it in the folder of the layer it belongs to.
 
 **How it fits together.** One user prompt, end to end. Each layer only calls the one below it, and only through the names shown:
 
 ```python
-# cli.py — harness: owns the process, the terminal, and the session file
-def main(args):
-    session = SessionLog.open(args.session) if args.resume else SessionLog.new()       # Wed
-    agent = Agent(ws, task, model=..., budget=..., trace=...,                         # run_agent's arguments
-                  provider=AnthropicProvider(model), session=session)                  # new kwargs, with defaults
-    signal.signal(signal.SIGINT, lambda *_: agent.abort() if not agent.aborting else sys.exit(130))
-    start_stdin_reader(on_steer=agent.steer, on_follow_up=agent.follow_up)            # Wed, background thread
-    for event in agent.events():
-        render(event)                     # MessageDelta: print as it arrives; ToolStart/ToolEnd: one line each
+# cli/main.py — harness: owns the process and the terminal
+def main():
+    app(obj=Ctx(on_agent=attach_terminal))  # attach_terminal: SIGINT -> agent.abort(); stdin lines -> steer/follow_up
+
+# cli/sessions.py — harness: every subcommand is one Typer function
+@app.command()                            # also resume, fork, show, config get|set|unset|list
+def run(ctx: typer.Context, task: str = typer.Option(...), repo: Path | None = None):
+    cfg = config.load(cwd=Path.cwd(), flags=...)          # Wed: defaults < user < project < env < flags
+    session = SessionLog(new_session_path())              # resume: SessionLog(path); fork: + checkout(entry_id)
+    provider = get_provider(cfg.provider, cfg.model, base_url=cfg.base_url)  # Thu: no model -> its default
+    agent = Agent(ws, provider=provider, budget=..., trace=...,  # what lasts the session
+                  session=session)                              # history comes from the session
+    ctx.obj.on_agent(agent)               # the terminal wires Ctrl-C and typed lines to this agent
+    agent.run(task, on_event=render)      # no --task on resume finishes a cut-off run
+    # render: MessageDelta printed as it arrives; ToolStart one line each
 
 # agent.py — stateful wrapper (pi's agent.ts): owns messages, queues, hooks; does every side effect
 class Agent:
-    def events(self):
-        hooks = Hooks(before_tool=allow, after_tool=identity, prepare_request=self._with_agents_md)  # Thu
-        for event in runtime.run(self.provider, self.messages, self.tools, self.budget, hooks,
+    def events(self, task=None):
+        if task is not None:
+            self.messages.append(UserMessage(text=task))   # one prompt per call; the transcript carries over
+        hooks = Hooks(before_tool=allow, after_tool=identity)
+        # self.system: the base prompt plus AGENTS.md (Thu), assembled once in __init__
+        for event in runtime.run(self.provider, self.system, self.messages, self.tools, self.budget, hooks,
                                  abort=self._abort, get_steering=self._drain_steer,
                                  get_follow_up=self._drain_follow_up):
             self.trace.log(event)         # update state first...
             self.session.append(event)
             yield event                   # ...then hand it to whoever is listening
-    def run(self):                        # run_agent() returns this; run_evals.py never changes
-        for _ in self.events(): pass
+    def run(self, task=None):             # run_agent(task, ...) returns Agent(...).run(task)
+        for _ in self.events(task): pass
         return self._result()
 
-# runtime.py — stateless loop (pi's agent-loop.ts): never imports anthropic, never touches files
-# providers/anthropic.py — the only file that imports the SDK (pi's packages/ai)
+# runtime.py — stateless loop (pi's agent-loop.ts): speaks only types.py's types; imports no SDK, touches no files
+# providers/*.py — the only files that import a vendor SDK or know a wire format (pi's packages/ai)
 ```
 
-**Why this achieves the objective.** Once the layers are separate, every feature this week is a local change: streaming touches only the provider; cancellation and steering touch only the runtime; sessions and `AGENTS.md` touch only the harness. The `FakeProvider` makes the runtime testable offline, so you can prove ordering and abort behavior without spending a cent. One rule keeps Week 1's harness working throughout: **keep the entry point `evals/run_evals.py` calls — `run_agent(...)`, or `Agent(...).run()` — exactly as it is**, so the harness never needs to change.
+**Why this achieves the objective.** Once the layers are separate, every feature this week is a local change: streaming and a second API touch only the providers; cancellation and steering touch only the runtime; sessions, `AGENTS.md`, commands and config touch only the harness — and because each subcommand is a thin layer over core functions (`SessionLog`, `config.set`), the interactive shell later adds its own `/` commands over the same functions. The `FakeProvider` makes the runtime testable offline, so you can prove ordering and abort behavior without spending a cent. One rule keeps Week 1's harness working throughout: **keep `run_agent(task, ...)`, the entry point `evals/run_evals.py` calls, exactly as it is**, so the harness never needs to change. The one exception is additive: a `provider=` keyword that defaults to `"anthropic"`, which `run_evals.py` fills from a new `--provider` flag. If your harness constructs the `Agent` directly instead, it changes once, from `Agent(ws, task, ...).run()` to `Agent(ws, ...).run(task)`; do that now, while it has only one or two callers.
 
 ## Day by day
 | Day | Time | Do | Working by end of day |
 |---|---|---|---|
 | Mon | 1.5 h | Trace pi's three layers through six files, at the line numbers given below | A half-page note mapping each rig file in the table above to its pi counterpart |
-| Tue | 2.5 to 3 h | `providers/`, `runtime.py`, parallel read-only tools; shrink `agent.py` | A fake provider streams events through `runtime.py`; read-only tools run in parallel with ordered results |
-| Wed | 2.5 to 3 h | Ctrl-C, steering, `edit_file` v2, `session.py`, `cli.py` | Ctrl-C mid-run leaves a session that resumes; `edit_file` v2 reports the closest candidate on a failed match |
-| Thu | 1.5 to 2 h | `AGENTS.md` loading; read pi's harness side and Aider against your own code | `AGENTS.md` loads into the system prompt; you can narrate pi's prompt-to-tool-result path from memory |
+| Tue | 2.5 to 3 h | rig's message types, the Anthropic and fake providers, `runtime.py`, parallel read-only tools; shrink `agent.py` | A fake provider streams events through `runtime.py`; read-only tools run in parallel with ordered results |
+| Wed | 3 to 3.5 h | Ctrl-C, steering, `edit_file` v2, `session.py`, `config.py`, the `cli/` package | Ctrl-C mid-run leaves a session that resumes; `edit_file` v2 reports the closest candidate on a failed match; `rig config set` persists across runs |
+| Thu | 2.5 to 3 h | `openai_chat.py` (OpenAI and OpenRouter); `AGENTS.md` loading; read pi's harness side and Aider against your own code | T04 passes on all three providers by flag; `AGENTS.md` loads into the system prompt; you can narrate pi's prompt-to-tool-result path from memory |
 | Fri | 1 to 1.5 h | Experiments 1 to 3 | `notes/week2-experiments.md`: parallel on/off, Aider-style edits, a reproduced fuzzy-match failure |
 | Sat | 3 to 4 h | Experiments 4 to 5; **Project increment**: v0.2 CLI, write T13 to T16 | Kill-and-resume verified; four new hidden-test tasks confirmed failing on a clean tree |
 | Sun | 2 to 3 h | Run T01 to T16 three times; answer remaining questions; attempt **Checkpoint** | v0.2 no worse than v0.1 on pass^3, or a redo list |
 
-**Starting this week already behind calendar?** `path.md`'s general rule is to drop that week's Experiments if you're short on time — but every step has a real dependency only on the step before it, not on its calendar day, so if you'd rather compress days than cut content, five sittings cover the same ground: Monday + Tuesday together (4 to 4.5 h); Wednesday unchanged; Thursday + Friday together (2.5 to 3.5 h — Experiments 1 to 3 only exercise code you've already built); Saturday unchanged; Sunday unchanged. If you're short on sittings as well as days, that's when dropping Experiments is the honest move.
+**Starting this week already behind calendar?** `path.md`'s general rule is to drop that week's Experiments if you're short on time — but every step has a real dependency only on the step before it, not on its calendar day, so if you'd rather compress days than cut content, five sittings cover the same ground: Monday + Tuesday together (4 to 4.5 h); Wednesday unchanged; Thursday + Friday together (3.5 to 4.5 h — Experiments 1 to 3 only exercise code you've already built); Saturday unchanged; Sunday unchanged. If you're short on sittings as well as days, that's when dropping Experiments is the honest move.
 
 ### Monday — map pi's three layers onto real lines of code.
 **Goal.** Point at the exact line where pi's harness hands control to its runtime, and explain why its runtime never imports a provider — before you build the same seams in rig tomorrow.
@@ -1019,98 +1055,164 @@ class Agent:
 **Done when** you can say, without looking: the harness hands off at `agent-session.ts:1899`, and `packages/agent` reaches a provider only through an injected function, never an import.
 
 ### Tuesday — provider, runtime, parallel execution.
-**Goal.** rig's loop becomes a generator of events over a swappable `Provider`; read-only tools run concurrently with results in call order; `agent.py` shrinks to a wrapper.
+**Goal.** rig's loop becomes a generator of events over a swappable `Provider` that speaks rig's own message types; read-only tools run concurrently with results in call order; `agent.py` shrinks to a wrapper.
 
-**Why.** Separating "call the model" from "run the loop" means a `FakeProvider` can drive the loop with no network, and tomorrow's cancellation and steering land in one file instead of all of `agent.py`.
+**Why.** Separating "call the model" from "run the loop" means a `FakeProvider` can drive the loop with no network, tomorrow's cancellation and steering land in one file instead of all of `agent.py`, and Thursday's second provider touches nothing outside `providers/`.
 
-**1. `providers/base.py`** — the vocabulary every other file speaks. Type this in as is:
+**1. `providers/types.py`** — the vocabulary every other file speaks. Type this in as is:
 
 ```python
-@dataclass
-class TurnStart: ...
-@dataclass
-class MessageDelta:          # provider: a chunk of streamed text
+from collections.abc import Generator
+from typing import Annotated, Any, Literal, Protocol
+
+from pydantic import BaseModel, Field
+
+class Text(BaseModel):
+    type: Literal["text"] = "text"
     text: str
-@dataclass
-class ToolCall:              # provider: the model asked for a tool
+class Thinking(BaseModel):
+    type: Literal["thinking"] = "thinking"
+    text: str
+    signature: str | None = None      # opaque replay data: only the model that wrote it can read it
+class ToolCall(BaseModel):            # a message part, and a provider event: the model asked for a tool
+    type: Literal["tool_call"] = "tool_call"
     id: str
     name: str
-    arguments: dict
-@dataclass
-class TurnEnd:               # provider: response finished; carries the full assistant content
-    stop_reason: str
-    usage: dict
-    content: list[dict]
-@dataclass
-class ToolStart:             # runtime: about to execute
+    arguments: dict[str, Any]
+
+class UserMessage(BaseModel):
+    role: Literal["user"] = "user"
+    text: str
+class AssistantMessage(BaseModel):
+    role: Literal["assistant"] = "assistant"
+    content: list[Text | Thinking | ToolCall]
+    provider: str                     # who wrote it; decides whether its Thinking can be replayed
+    model: str
+class ToolResult(BaseModel):          # one per call, appended in call order
+    role: Literal["tool_result"] = "tool_result"
+    call_id: str
+    output: str
+    is_error: bool = False
+Message = Annotated[UserMessage | AssistantMessage | ToolResult, Field(discriminator="role")]
+
+class ToolSpec(BaseModel):            # each adapter wraps this in its own tool format
+    name: str
+    description: str
+    parameters: dict[str, Any]        # JSON Schema
+class Context(BaseModel):             # everything one request needs, in rig's terms
+    system: str | None
+    messages: list[Message]
+    tools: list[ToolSpec]
+
+class Usage(BaseModel):               # input_tokens excludes cache reads, on every provider
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cache_read_tokens: int = 0
+    cache_write_tokens: int = 0
+StopReason = Literal["end_turn", "tool_use", "max_tokens", "refusal", "aborted"]
+
+class TurnStart(BaseModel):
+    type: Literal["turn_start"] = "turn_start"
+class MessageDelta(BaseModel):        # provider: a chunk of streamed text
+    type: Literal["message_delta"] = "message_delta"
+    text: str
+class TurnEnd(BaseModel):             # provider: response finished; carries the whole assistant message
+    type: Literal["turn_end"] = "turn_end"
+    stop_reason: StopReason
+    usage: Usage
+    message: AssistantMessage
+class ToolStart(BaseModel):           # runtime: about to execute
+    type: Literal["tool_start"] = "tool_start"
     call: ToolCall
-@dataclass
-class ToolEnd:               # runtime: finished, yielded in call order
+class ToolEnd(BaseModel):             # runtime: finished, yielded in call order
+    type: Literal["tool_end"] = "tool_end"
     call: ToolCall
     output: str
     is_error: bool
 
-Event = TurnStart | MessageDelta | ToolCall | TurnEnd | ToolStart | ToolEnd
+Event = Annotated[TurnStart | MessageDelta | ToolCall | TurnEnd | ToolStart | ToolEnd,
+                  Field(discriminator="type")]
 
 class Provider(Protocol):
-    def stream(self, request: dict) -> Iterator[Event]: ...
+    name: str                         # "anthropic", "openai", "openrouter", "fake"
+    model: str
+    def stream(self, context: Context) -> Generator[Event]: ...   # a generator, so it can be closed early
 ```
 
-Putting the full assistant `content` on `TurnEnd` means the runtime never reassembles deltas — pi does the same when its stream's `done` event hands back the final message ([`agent-loop.ts` L453–466](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L453-L466)). One difference, on purpose: pi's [`StreamFn` contract](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/types.ts#L19-L37) never throws and encodes failures as events; rig keeps raising `LLMError`, which `agent.py` already maps to a status.
+These are pydantic models (rig already depends on pydantic), so construct them with keyword arguments; in exchange, `TypeAdapter(Message).validate_python(d)` turns a stored dict back into the right class, which Wednesday's `session.py` needs. Every part, message and event carries a fixed `type` or `role` tag for the same reason: inside one process the runtime and CLI dispatch on the class (`match event: case TurnEnd(): ...`), but anything written to JSON (the session log, a trace, events streamed to another process) needs the tag to come back as the right class, as `TypeAdapter(Event)` does for events. Each provider is built with its model and `max_tokens`, so `stream()` takes only the `Context`. `stream()` is typed as a `Generator`, not just an `Iterator`, because the runtime may need to close it before it finishes: Wednesday's Ctrl-C does exactly that, wrapping it in `contextlib.closing`, which also closes the HTTP stream.
 
-**2. `providers/fake.py`** — `FakeProvider(script: list[list[Event]])`; each `stream()` call yields the next scripted list. Build the script with small helpers that make a text turn and a tool-call turn, like pi's [`fauxText`/`fauxToolCall`/`fauxAssistantMessage`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/providers/faux.ts#L54-L78).
+Why rig's own types instead of Anthropic's blocks: the runtime appends `end.message` and `ToolResult`s without knowing who wrote them, and each adapter's whole job becomes two translations, `Context` to a request body and the vendor's stream to rig `Event`s. `StopReason` and `Usage` are normalized inside the adapter, so `budget.charge` and the `max_tokens` check in `run_tools` work on any provider. Putting the whole assistant message on `TurnEnd` means the runtime never reassembles deltas — pi does the same when its stream's `done` event hands back the final message ([`agent-loop.ts` L453–466](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L453-L466)). One difference, on purpose: pi's [`StreamFn` contract](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/types.ts#L19-L37) never throws and encodes failures as events; rig keeps raising `LLMError`, which `agent.py` already maps to a status.
 
-**3. `providers/anthropic.py`** — `AnthropicProvider.stream()` opens the SDK's `client.messages.stream(**request)` and translates: each text delta → `MessageDelta`; once the stream ends, each `tool_use` block of the final message (`stream.get_final_message()`) → `ToolCall`, then one `TurnEnd` with `stop_reason`, `usage` and the final `content`. Don't parse partial tool-call JSON yourself; the final message has it complete. pi's version of the same translation is [`anthropic-messages.ts` L576](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/anthropic-messages.ts#L576) (the raw event names it handles are listed at [L399–401](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/anthropic-messages.ts#L399-L401)). This replaces `llm.py` on the live path.
+**2. `providers/fake.py`** — `FakeProvider(script: list[list[Event]])` with `name = "fake"`; each `stream(context)` call records the context and yields the next scripted list. Build the script with small helpers that make a text turn and a tool-call turn (each ending in a `TurnEnd` whose `AssistantMessage` holds the same parts), like pi's [`fauxText`/`fauxToolCall`/`fauxAssistantMessage`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/providers/faux.ts#L54-L78).
+
+**3. `providers/anthropic.py`** — two translations. *Request:* `to_request(context)` builds the Messages API body: `system` at the top level; each `ToolSpec` becomes `{name, description, input_schema}`; an `AssistantMessage` becomes content blocks (`Text` → `text`, `ToolCall` → `tool_use` with `input`, `Thinking` → `thinking` with its `signature`, but only when the message's `provider` and `model` match this provider's — otherwise drop it, as pi does in [`transform-messages.ts` L128–137](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/transform-messages.ts#L128-L137)); consecutive `ToolResult`s become **one** user message of `tool_result` blocks. *Response:* `client.messages.stream(**body)`; each text delta → `MessageDelta`; once the stream ends, `stream.get_final_message()` holds the complete message: each `tool_use` block → `ToolCall`, then one `TurnEnd` with the stop reason (Anthropic's names already match rig's), a `Usage` from `input_tokens`, `output_tokens`, `cache_read_input_tokens` and `cache_creation_input_tokens`, and an `AssistantMessage(provider="anthropic", ...)` built from the final content. Don't parse partial tool-call JSON yourself; the final message has it complete. Map the SDK's `APIStatusError` and `APIConnectionError` to `LLMError`. pi's version of the same translation is [`anthropic-messages.ts` L576](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/anthropic-messages.ts#L576) (the raw event names it handles are listed at [L399–401](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/anthropic-messages.ts#L399-L401)). This replaces `llm.py` on the live path.
 
 **4. `runtime.py`** — one generator, plus a small `Hooks` dataclass whose three fields default to "allow" and identity. Control flow:
 
 ```python
-def run(provider, messages, tools, budget, hooks) -> Iterator[Event]:
+def run(provider, system, messages, tools, budget, hooks) -> Generator[Event]:
+    by_name = {t.spec.name: t for t in tools}  # tools: list[RuntimeTool], built by agent.py
     while True:
         budget.check()
         yield TurnStart()
-        request = build_request(hooks.prepare_request(messages), tools)
+        context = Context(system=system, messages=hooks.prepare_request(messages),
+                          tools=[t.spec for t in tools])
         calls, end = [], None
-        for event in provider.stream(request):
+        for event in provider.stream(context):
             yield event                         # CLI prints deltas; agent.py traces everything
             if isinstance(event, ToolCall): calls.append(event)
             elif isinstance(event, TurnEnd): end = event
-        messages.append({"role": "assistant", "content": end.content})
+        messages.append(end.message)            # rig's own type: the runtime never sees vendor JSON
         if not calls:
             return                              # end_turn, refusal, truncated text
-        results = yield from run_tools(calls, end.stop_reason, hooks)
-        messages.append({"role": "user", "content": tool_results(results)})
+        results = yield from run_tools(calls, end.stop_reason, by_name, hooks)
+        messages.extend(ToolResult(call_id=c.id, output=out, is_error=err) for c, out, err in results)
 ```
 
 Compare with pi's `runLoop`: `prepareRequest` is called every turn, including the first ([L228](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L228-L248)), and a `length` (`max_tokens`) stop fails every tool call instead of running it ([L276](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L276-L279), [L488](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L488-L513)) — move your Week 1 `max_tokens` handler into `run_tools` unchanged.
 
-**5. Parallel tools, inside `run_tools`** — give each registered tool a `read_only` flag (`list_files`, `read_file`, `search`: true; `edit_file`, `bash`: false). If every call in the batch is read-only, run them with `ThreadPoolExecutor.map`, which returns results in submission order; otherwise run the batch sequentially — pi applies the same rule ([`executeToolCalls`, L518–533](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L518-L533)) and gets its ordering from `Promise.all` ([L656](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L596-L670)). Call `hooks.before_tool` before each call (a deny becomes an `is_error` result, like [`prepareToolCall`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L718-L787)) and `hooks.after_tool` after ([`finalizeExecutedToolCall`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L869-L920)). Guard `edit_file` with a lock per resolved path (`dict[Path, threading.Lock]`, keyed by `Path.resolve()`), the way [`withFileMutationQueue`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/tools/file-mutation-queue.ts#L32) keys by `realpath`.
+**5. Parallel tools, inside `run_tools`** — the runtime knows nothing about workspaces or the tool registry: it gets a list of `RuntimeTool`s, each a `ToolSpec` plus a `run(arguments) -> (output, is_error)` with the workspace already bound in, a `read_only` flag, and an optional `lock_key(arguments)`. Give each registered tool a `read_only` flag (`list_files`, `read_file`, `search`: true; `edit_file`, `bash`: false). If every call in the batch is read-only, run them with `ThreadPoolExecutor.map`, which returns results in submission order; otherwise run the batch sequentially — pi applies the same rule ([`executeToolCalls`, L518–533](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L518-L533)) and gets its ordering from `Promise.all` ([L656](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L596-L670)). Call `hooks.before_tool` before each call (a deny becomes an `is_error` result, like [`prepareToolCall`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L718-L787)) and `hooks.after_tool` after ([`finalizeExecutedToolCall`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L869-L920)). Guard `edit_file` with a lock per resolved path (its `lock_key` returns `Path.resolve()` of the file it writes; one `threading.Lock` per key, created on first use), the way [`withFileMutationQueue`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/tools/file-mutation-queue.ts#L32) keys by `realpath`.
 
-**6. `agent.py`** (Week 1's `loop.py`, renamed) — keep the entry point the eval harness calls exactly as it is: `run_agent(task, ws=..., model=..., budget=..., trace=...)` now just builds an `Agent` and returns `Agent.run()`. Inside, `run()` builds the provider and hooks, iterates `runtime.run(...)`, writes one trace event per `Event`, and builds the result from the final messages. That's pi's [`processEvents`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent.ts#L575-L622) pattern: update state first, then notify listeners.
+**6. `agent.py`** (Week 1's `loop.py`, renamed) — keep the entry point the eval harness calls exactly as it is: `run_agent(task, ws=..., model=..., budget=..., trace=...)` now just returns `Agent(ws, ...).run(task)`. The task goes to `run`, not the constructor: `run(task)` appends it as a `UserMessage` and runs until the model stops, so a second `run(...)` on the same instance continues the same transcript, and `run()` with no task continues it as it stands (a resumed session that was interrupted). The constructor takes an optional `messages=` with earlier history, which is all Wednesday's resume needs. The constructor builds the provider with `get_provider(provider, model)` (from a new `provider="anthropic"` keyword, so existing callers don't change) and turns Week 1's tool registry into `RuntimeTool`s (the registry's `input_schema` is the spec's `parameters`; `run` is `functools.partial` over Week 1's `run_tool(ws, name, **arguments)`, which already turns every failure into an `is_error` result; `edit_file` gets a `lock_key`); `run(task)` builds the hooks, iterates `runtime.run(...)`, writes one trace event per `Event`, and builds the result from the final messages. That's pi's [`processEvents`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent.ts#L575-L622) pattern: update state first, then notify listeners.
 
 `run_tools`, the one function where parallelism, ordering, truncation and the hooks all meet:
 
 ```python
-def run_tools(calls, stop_reason, hooks):            # a generator; returns results in call order
+@dataclass(frozen=True)
+class RuntimeTool:                                   # what the runtime can call; agent.py builds them
+    spec: ToolSpec
+    run: Callable[[dict[str, Any]], tuple[str, bool]]          # the workspace is already bound in
+    read_only: bool = False
+    lock_key: Callable[[dict[str, Any]], Hashable] | None = None  # edit_file: the path it writes
+
+def run_tools(calls, stop_reason, tools, hooks):     # a generator; returns results in call order
     if stop_reason == "max_tokens":                  # arguments may be cut off: run nothing
         results = [(c, TRUNCATED_MSG, True) for c in calls]
-    else:
-        for c in calls: yield ToolStart(c)
-        def one(c):
-            verdict = hooks.before_tool(c)
-            if verdict is not ALLOW: return c, f"Blocked: {verdict.reason}", True
-            with path_lock(c) if c.name == "edit_file" else nullcontext():
-                out, is_error = run_tool(ws, c.name, c.arguments)    # Week 1's dispatcher, unchanged
-            return c, *hooks.after_tool(c, (out, is_error))
-        if all(TOOLS[c.name].read_only for c in calls):
-            results = list(POOL.map(one, calls))     # map() keeps submission order
-        else:
-            results = [one(c) for c in calls]
-    for c, out, is_error in results: yield ToolEnd(c, out, is_error)
+        for c, out, err in results: yield ToolEnd(call=c, output=out, is_error=err)
+        return results
+    def one(c):                                      # never raises: every failure is a result
+        tool = tools.get(c.name)
+        if tool is None: return c, f"Tool {c.name} is not registered", True
+        verdict = hooks.before_tool(c)
+        if verdict is not None: return c, f"Blocked: {verdict.reason}", True
+        with PATH_LOCKS.get(tool.lock_key(c.arguments)) if tool.lock_key else nullcontext():
+            out, is_error = tool.run(c.arguments)
+        return c, *hooks.after_tool(c, (out, is_error))
+    if all(c.name in tools and tools[c.name].read_only for c in calls):
+        for c in calls: yield ToolStart(call=c)      # the batch starts together
+        with ThreadPoolExecutor() as pool:
+            results = list(pool.map(one, calls))     # map() keeps submission order
+        for c, out, err in results: yield ToolEnd(call=c, output=out, is_error=err)
+    else:                                            # any mutating call: one at a time, in order
+        results = []
+        for c in calls:
+            yield ToolStart(call=c)
+            results.append(one(c))
+            yield ToolEnd(call=c, output=results[-1][1], is_error=results[-1][2])
     return results
 ```
 
-Tests, in `tests/test_runtime.py`, all driven by `FakeProvider` (no network, no cost): a text-only turn ends the loop; one tool call round-trips; three read-only calls whose fake tools sleep 0.3, 0.1 and 0.2 seconds come back in call order and finish in under 0.5 seconds total; a mixed batch with `edit_file` runs sequentially; a `max_tokens` turn runs no tool.
+Tests, in `tests/test_runtime.py`, all driven by `FakeProvider` (no network, no cost): a text-only turn ends the loop; one tool call round-trips; three read-only calls whose fake tools sleep 0.3, 0.1 and 0.2 seconds come back in call order and finish in under 0.5 seconds total; a mixed batch with `edit_file` runs sequentially; a `max_tokens` turn runs no tool. In `tests/test_providers.py`, test `AnthropicProvider.to_request` directly (no network): three `ToolResult`s in a row become one user message of three `tool_result` blocks, and a `Thinking` part from an `AssistantMessage` with `provider="openai"` produces no `thinking` block.
 
 **Done when:** a `FakeProvider` scripted with three read-only calls runs through `runtime.run()` and the trace shows `ToolEnd`s in call order; one live run streams text as it arrives; `python evals/run_evals.py --task-id T04` still passes.
 
@@ -1119,11 +1221,12 @@ Tests, in `tests/test_runtime.py`, all driven by `FakeProvider` (no network, no 
 
 **Why.** An abort that leaves a `tool_use` without its `tool_result` corrupts the transcript itself: the very next request fails. An edit that fails silently, or a fuzzy edit that lands on the wrong block, erodes trust faster than an honest error. An append-only log makes resume and fork nearly free, because nothing is ever rewritten.
 
-1. **Ctrl-C, in `runtime.py` and `cli.py`** — `cli.py` installs `signal.signal(signal.SIGINT, handler)`; the first press sets a `threading.Event` passed into `runtime.run()`, the second calls `sys.exit`. Don't catch `KeyboardInterrupt` directly: the [`signal` docs](https://docs.python.org/3/library/signal.html) warn it can land mid-bytecode and leave state inconsistent. The runtime checks the event between stream events and before each tool; on abort it yields an `is_error` "aborted" `ToolEnd` for every call not yet answered, then a `TurnEnd(stop_reason="aborted")`. pi's version: [`abort()`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent.ts#L350) only fires a signal, the loop checks it at safe points ([L629–638](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L629-L638)), and a failed run still emits a well-formed final message through the normal events ([`handleRunFailure`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent.ts#L542-L558)). As a last line of defense, also add pi's orphan pass to `build_request`: any `tool_use` without a result gets a synthetic one before the request goes out ([`closePendingToolCalls`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/transform-messages.ts#L179-L207)).
-2. **Steering and follow-up** — `agent.py` owns two `queue.Queue`s; `cli.py` puts typed lines into one or the other; `runtime.run()` takes `get_steering()` and `get_follow_up()` callables. Drain steering after each tool batch and append it before the next request; drain follow-up only when a turn ends with no tool calls and no steering, and if it returns messages, keep looping. That's exactly pi's timing: steering polled at [L185](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L185) and [L304](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L304), follow-up only after the inner loop exits ([L311](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L310-L317)), with the queues themselves in [`PendingMessageQueue`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent.ts#L149-L180).
-3. **`edit_file` v2, in `tools/fs.py`** — detect the file's line ending, normalize file and `old_text` to LF, match, then restore the original ending on write ([`detectLineEnding`/`normalizeToLF`/`restoreLineEndings`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/tools/edit-diff.ts#L11-L31)). Accept `edits: list[{old_text, new_text}]`: validate every edit against the original content first, apply only if all match exactly once — all or nothing ([`applyEditsToNormalizedContent`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/tools/edit-diff.ts#L300)). When an edit doesn't match, raise `ToolError` naming which edit failed and listing the closest lines from `difflib.get_close_matches` — never apply them. Don't port `fuzzyFindText`; reproducing its failure is Friday's Experiment 3.
-4. **`session.py`** — `SessionLog(path)` with `append(type, payload, parent_id) -> id` (one flushed JSON line per entry: `{id, parent_id, type, payload}`), `load()`, and `branch(leaf_id)`, which walks `parent_id`s back to the root and returns the messages along that path. Resume = load, then continue from the last entry; fork = continue from any earlier `entry_id`, so new entries get it as `parent_id` and nothing is ever rewritten. `agent.py` appends every message as it goes. pi's equivalents: entry types ([L57](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/session-manager.ts#L57), [L183](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/session-manager.ts#L183)), [`appendMessage`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/session-manager.ts#L1204), [`getBranch`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/session-manager.ts#L1469), [`buildSessionContext`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/session-manager.ts#L1497), [`branch`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/session-manager.ts#L1579).
-5. **`cli.py`** — `argparse` subcommands: `rig run --task ...` (today's `scripts/run_agent.py`), `rig resume <session>`, `rig fork <session> <entry_id>`. While a run streams, read lines from stdin on a background thread; a line prefixed `/steer` goes to the steering queue, anything else to follow-up.
+1. **Ctrl-C, in `runtime.py` and `cli/main.py`** — `cli/main.py` installs `signal.signal(signal.SIGINT, handler)`; the first press sets a `threading.Event` passed into `runtime.run()`, the second calls `sys.exit`. Don't catch `KeyboardInterrupt` directly: the [`signal` docs](https://docs.python.org/3/library/signal.html) warn it can land mid-bytecode and leave state inconsistent. The runtime checks the event between stream events and before each tool; on abort it yields an `is_error` "aborted" `ToolEnd` for every call not yet answered, then a `TurnEnd(stop_reason="aborted")`. pi's version: [`abort()`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent.ts#L350) only fires a signal, the loop checks it at safe points ([L629–638](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L629-L638)), and a failed run still emits a well-formed final message through the normal events ([`handleRunFailure`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent.ts#L542-L558)). As a last line of defense, also add pi's orphan pass to the runtime, just before `provider.stream(context)`: any `ToolCall` without a matching `ToolResult` gets a synthetic one before the request goes out — it runs on rig's own types, so it protects every provider at once ([`closePendingToolCalls`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/transform-messages.ts#L179-L207)).
+2. **Steering and follow-up** — `agent.py` owns two `queue.Queue`s; `cli/main.py` puts typed lines into one or the other; `runtime.run()` takes `get_steering()` and `get_follow_up()` callables. Drain steering after each tool batch and append it before the next request; drain follow-up only when a turn ends with no tool calls and no steering, and if it returns messages, keep looping. That's exactly pi's timing: steering polled at [L185](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L185) and [L304](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L304), follow-up only after the inner loop exits ([L311](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts#L310-L317)), with the queues themselves in [`PendingMessageQueue`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent.ts#L149-L180).
+3. **`edit_file` v2, in `tools/fs.py`** — detect the file's line ending, normalize file and `old_text` to LF, match, then restore the original ending on write ([`detectLineEnding`/`normalizeToLF`/`restoreLineEndings`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/tools/edit-diff.ts#L11-L31)). Accept `edits: list[{old_text, new_text}]`: validate every edit against the original content first, apply only if all match exactly once — all or nothing ([`applyEditsToNormalizedContent`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/tools/edit-diff.ts#L300)). When an edit doesn't match, raise `ToolError` naming which edit failed and listing the closest lines from `difflib.get_close_matches` — never apply them; if its `new_text` is already in the file, also say the edit may already be applied (Aider's hint for the same case), which is what a model re-sending an edit after `rig resume` needs to hear. Give each edit an optional `replace_all` flag that replaces every occurrence instead of requiring exactly one, for renames: Claude Code (`replace_all`), Gemini CLI (`allow_multiple`) and OpenCode (`replaceAll`) all have it, and without it a rename across twenty call sites takes twenty edits. Don't port `fuzzyFindText`; reproducing its failure is Friday's Experiment 3.
+4. **`session.py`** — `SessionLog(path)` with `append(type, payload, parent_id) -> id` (one flushed JSON line per entry: `{id, parent_id, type, payload}`), `load()`, and `branch(leaf_id)`, which walks `parent_id`s back to the root and returns the messages along that path. Resume = load, then continue from the last entry; fork = continue from any earlier `entry_id`, so new entries get it as `parent_id` and nothing is ever rewritten. Either way the branch's messages go into `Agent(ws, ..., messages=branch)`, followed by `run(new_prompt)`, or by `run()` to finish an interrupted turn. `agent.py` appends every message as it goes, stored as `message.model_dump()`; because messages are rig's own types, a session recorded on one provider resumes on another. pi's equivalents: entry types ([L57](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/session-manager.ts#L57), [L183](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/session-manager.ts#L183)), [`appendMessage`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/session-manager.ts#L1204), [`getBranch`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/session-manager.ts#L1469), [`buildSessionContext`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/session-manager.ts#L1497), [`branch`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/session-manager.ts#L1579).
+5. **The `cli/` package** — one [Typer](https://typer.tiangolo.com/) app (`cli/app.py`) with a function per subcommand, grouped one module per command group (`cli/sessions.py`, `cli/config_cmd.py`): `run --task ...` (today's `scripts/run_agent.py`), `resume <session>`, `fork <session> <entry_id>`, `show <session>` (lists entries, so you can pick one to fork from) and step 6's `config` commands. Typer gives you parsing, `--help`, and clear errors for typos and missing options, so each command body is a few lines over `SessionLog` and the `Agent`. Keep sessions in `.rig/sessions/<id>.jsonl`, with ids like `261029-1432-3fa9c2e1` (start time, then 8 random hex digits) so a listing sorts by date, and print the id when a run ends. Things only a terminal has stay in `cli/main.py`, which hands the app a hook it calls with the `Agent` before the run: install `signal.signal(signal.SIGINT, ...)` (first press `agent.abort()`, second exits), and read lines from stdin on a background thread, where a line prefixed `/steer` goes to the steering queue and anything else to follow-up. Add a `[project.scripts]` entry so `uv run rig ...` works, and test the commands with Typer's [`CliRunner`](https://typer.tiangolo.com/tutorial/testing/) and a `FakeProvider` passed in the same way. Refuse `resume` without `--task` when the session ended in an answer: sending that transcript would ask the model to extend its last reply.
+6. **`config.py`** — a pydantic `Config` model where every key is typed and has a default (`provider`, `model`, `max_tokens`, a nested `budget` section, `base_url` for local servers), and `load(cwd, flags)`, which deep-merges, lowest first: the defaults; the user file `~/.config/rig/config.json` (`$XDG_CONFIG_HOME/rig/config.json` when that is set); the project file `.rig/config.json` in the nearest directory at or above `cwd` that has one; `RIG_*` environment variables (`RIG_MODEL`, `RIG_BUDGET__MAX_USD`); then command-line flags, where only the flags actually given count: declare every option with a `None` default, so `load` can tell a flag that was passed from one left at its default. Nested sections merge key by key, as pi's [`deepMergeSettings`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/settings-manager.ts#L142-L147) merges its global and project files ([`FileSettingsStorage`, L186–195](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/settings-manager.ts#L186-L195)). Accessors: `get(key)` with dotted keys (`budget.max_usd`), `set(key, value, scope="project" | "user")`, `unset(key, scope)`, and `origin(key)`, which names the layer a value came from. `set` must read only the target file, validate the new value against the model, change that one key and write the file back — never write the merged config, or every default and every user setting gets copied into the project file; pi does the same read-modify-write per scope in [`persistScopedSettings`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/settings-manager.ts#L598-L627). Commands: `rig config get KEY`, `rig config set KEY VALUE [--user]`, `rig config unset KEY [--user]`, `rig config list [--show-origin]`. Two safety rules: API keys never go in any config file (they stay in the environment, as in Week 1), and `base_url` is accepted only from the user file, because a project file comes from whoever wrote the repository — a `base_url` there would send your API key to their server. Store both files as JSON, as pi's `settings.json` and Claude Code's settings files are: the standard `json` module reads and writes it, and unlike YAML nothing in it is reinterpreted (an unquoted `no` stays text, never `false`).
 
 Where the abort checks and the queue drains sit inside Tuesday's loop — the only lines that change:
 
@@ -1132,8 +1235,13 @@ for event in provider.stream(request):
     if abort.is_set(): break                          # check between stream events
     ...
 if abort.is_set():                                    # every unanswered call still gets a result
-    for c in calls: yield ToolEnd(c, "Aborted by user", True)
-    yield TurnEnd("aborted", usage={}, content=[])
+    # text_so_far: [Text(text="".join(deltas))] from the MessageDeltas seen before the abort, or []
+    partial = AssistantMessage(content=[*text_so_far, *calls], provider=provider.name, model=provider.model)
+    messages.append(partial)
+    for c in calls:
+        yield ToolEnd(call=c, output="Aborted by user", is_error=True)
+        messages.append(ToolResult(call_id=c.id, output="Aborted by user", is_error=True))
+    yield TurnEnd(stop_reason="aborted", usage=Usage(), message=partial)
     return
 results = yield from run_tools(calls, end.stop_reason, hooks, abort)   # run_tools checks abort per call
 steer = get_steering()                                # after the batch, before the next request
@@ -1146,46 +1254,51 @@ messages.extend(steer)
 And the one non-obvious piece of `session.py`, rebuilding a branch:
 
 ```python
-def branch(self, leaf_id) -> list[dict]:              # resume = branch(last id); fork = branch(entry_id)
+MESSAGE = TypeAdapter(Message)                        # dict -> UserMessage | AssistantMessage | ToolResult
+
+def branch(self, leaf_id) -> list[Message]:           # resume = branch(last id); fork = branch(entry_id)
     by_id = {e["id"]: e for e in self.load()}
     path, cur = [], by_id[leaf_id]
     while cur:
         path.append(cur)
         cur = by_id.get(cur["parent_id"])
-    return [e["payload"] for e in reversed(path) if e["type"] == "message"]
+    return [MESSAGE.validate_python(e["payload"]) for e in reversed(path) if e["type"] == "message"]
 ```
 
-Tests: `tests/test_abort.py` — set the abort event at three points of a `FakeProvider` run (mid-stream, mid-parallel-batch, mid-edit) and assert that every `tool_use` in the resulting messages has a matching `tool_result` and that a resumed run's first request passes your orphan check. `tests/test_edit_file_v2.py` — a CRLF file keeps its CRLF after an edit; a two-edit list where the second misses leaves the file byte-identical; a near miss names the closest line in the error. `tests/test_session.py` — append five entries, fork from the third, append two more; the branch from the new leaf has five messages, and the file still holds all seven lines.
+Tests: `tests/test_abort.py` — set the abort event at three points of a `FakeProvider` run (mid-stream, mid-parallel-batch, mid-edit) and assert that every `ToolCall` in the resulting messages has a matching `ToolResult` and that a resumed run's first request passes your orphan check. `tests/test_edit_file_v2.py` — a CRLF file keeps its CRLF after an edit; a two-edit list where the second misses leaves the file byte-identical; a near miss names the closest line in the error. `tests/test_session.py` — append five entries, fork from the third, append two more; the branch from the new leaf has five messages, and the file still holds all seven lines.
 
-**Done when:** Ctrl-C during streaming, during a parallel tool batch, and during an edit each leaves a session that `rig resume` continues and the API accepts — one test per case, driven by `FakeProvider`.
+`tests/test_config.py`, with `HOME` and the working directory pointed at `tmp_path`: a project value beats a user value beats the default, an env var beats the project file, and a flag beats everything; `set` in the project scope leaves the user file byte-identical and writes only that key; an invalid value is rejected without touching the file; `origin` names the right layer; a `base_url` in a project file is ignored with a warning.
 
-### Thursday — AGENTS.md, then read pi's harness against your own code.
-**Goal.** Project instructions reach the model; you can narrate pi's prompt-to-tool-result path and its failure path from the trace alone.
+**Done when:** Ctrl-C during streaming, during a parallel tool batch, and during an edit each leaves a session that `rig resume` continues and the API accepts — one test per case, driven by `FakeProvider`; and `rig config set model X`, then a new `rig run`, uses `X`, with `rig config list --show-origin` showing where each value came from.
 
-**Why.** You've now built your own answers to every problem pi's harness solves. Reading pi after building gives you something to compare against, instead of ideas to copy.
+### Thursday — a second provider, AGENTS.md, then read pi's harness against your own code.
+**Goal.** rig runs the same task on OpenAI and OpenRouter by changing one flag; project instructions reach the model; you can narrate pi's prompt-to-tool-result path and its failure path from the trace alone.
 
-1. **Build step 7, in `agent.py`** where the system prompt is assembled: if `ws.root / "AGENTS.md"` exists, append it wrapped as `<project_instructions path="AGENTS.md">...</project_instructions>`, after the base prompt — pi's [`renderProjectContext`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/system-prompt.ts#L79-L86). Repo root only this week; pi also searches parent directories and `CLAUDE.md` variants ([`resource-loader.ts` L212](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/resource-loader.ts#L212)), which you don't need yet.
-2. Read each pi file side by side with the rig file you wrote for the same job: [`edit-diff.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/tools/edit-diff.ts) vs. your `edit_file` v2; [`file-mutation-queue.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/tools/file-mutation-queue.ts) (61 lines) vs. your path lock; [`truncate.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/tools/truncate.ts#L78) (`truncateHead` L78, `truncateTail` L168) vs. your Week 1 `truncate`; `agent-session.ts` [`_queueSteer`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/agent-session.ts#L2302-L2327) and [`abort`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/agent-session.ts#L2498-L2508) vs. your `cli.py`. Then Aider's edit cascade for contrast: [`perfect_replace`](https://github.com/Aider-AI/aider/blob/5dc9490bb35f9729ef2c95d00a19ccd30c26339c/aider/coders/editblock_coder.py#L146) → [`replace_part_with_missing_leading_whitespace`](https://github.com/Aider-AI/aider/blob/5dc9490bb35f9729ef2c95d00a19ccd30c26339c/aider/coders/editblock_coder.py#L243) → [`try_dotdotdots`](https://github.com/Aider-AI/aider/blob/5dc9490bb35f9729ef2c95d00a19ccd30c26339c/aider/coders/editblock_coder.py#L190) → [`replace_closest_edit_distance`](https://github.com/Aider-AI/aider/blob/5dc9490bb35f9729ef2c95d00a19ccd30c26339c/aider/coders/editblock_coder.py#L296).
-3. Trace the paths in **Read: pi (main) and Aider's edit blocks (contrast)** below: the happy path, then the failure path.
-4. Answer questions 1 to 4 in **You should be able to answer** from the trace alone.
+**Why.** A provider interface is only proven provider-neutral once a second, differently shaped API sits behind it; until then, Anthropic's assumptions hide in it unnoticed. And you've now built your own answers to every problem pi's harness solves, so reading pi after building gives you something to compare against, instead of ideas to copy.
 
-Test: in a `tmp_path` workspace with an `AGENTS.md` containing a marker string, the first request the `FakeProvider` receives has the marker inside `<project_instructions>`; without the file, the system prompt is unchanged from Week 1.
+1. **`providers/openai_chat.py`** — `OpenAIChatProvider(model, max_tokens, base_url=None, api_key_env="OPENAI_API_KEY", name="openai")` on the official [`openai`](https://github.com/openai/openai-python) SDK (`uv add openai`), using [Chat Completions](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create) because OpenRouter ([quickstart](https://openrouter.ai/docs/quickstart): `base_url="https://openrouter.ai/api/v1"`, key in `OPENROUTER_API_KEY`), vLLM and [Ollama](https://docs.ollama.com/api/openai-compatibility) accept the same format; `get_provider("openrouter", model)` is this class with OpenRouter's `base_url`, key and name. *Request:* the system prompt becomes the first message (`role: "system"`); each `ToolSpec` becomes `{"type": "function", "function": {name, description, parameters}}`; an `AssistantMessage` becomes `{role: "assistant", content, tool_calls: [{id, type: "function", function: {name, arguments: json.dumps(...)}}]}` with its `Thinking` parts dropped; each `ToolResult` becomes its own `{role: "tool", tool_call_id, content}` message. *Response:* `client.chat.completions.create(**body, stream=True, stream_options={"include_usage": True})`; each `delta.content` → `MessageDelta`. Tool calls arrive as fragments keyed by `index`: the first fragment for an index carries `id` and `function.name`, later ones only pieces of `function.arguments`, so accumulate them per index and `json.loads` each argument string only once the stream ends; if one doesn't parse, emit the `ToolCall` with `{}` and have `run_tools` return an `is_error` result quoting the bad JSON, the way pi's `argumentsError` does. Map `finish_reason`: `stop` → `end_turn`, `tool_calls` → `tool_use`, `length` → `max_tokens`, `content_filter` → `refusal`. The final chunk has empty `choices` and carries `usage`; `prompt_tokens` *includes* cached tokens, so `input_tokens = prompt_tokens - prompt_tokens_details.cached_tokens`, and `output_tokens = completion_tokens`. pi's same adapter: [`stream`, L309](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/openai-completions.ts#L309), accumulation by index in [`ensureToolCallBlock`, L505](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/openai-completions.ts#L505-L512) and [L661–690](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/openai-completions.ts#L661-L690), [`convertMessages`, L1204](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/openai-completions.ts#L1204), [`convertTools`, L1497](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/openai-completions.ts#L1497), [`parseChunkUsage`, L1534–1580](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/openai-completions.ts#L1534-L1580) and [`mapStopReason`, L1582–1606](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/openai-completions.ts#L1582-L1606). Finally, add `--provider anthropic|openai|openrouter` to `cli/sessions.py` and `run_evals.py` (default `anthropic`, so existing runs don't change); give each provider a default model, so `--provider` alone switches (the checkpoint changes nothing else); pass `base_url` to the SDK only when one is set; and add rates for the models you'll use as a JSON table beside Week 1's in `rig/core/pricing/`.
+2. **Build step 7, in `agent.py`** where the system prompt is assembled: if `ws.root / "AGENTS.md"` exists, append it wrapped as `<project_instructions path="AGENTS.md">...</project_instructions>`, after the base prompt — pi's [`renderProjectContext`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/system-prompt.ts#L79-L86). Repo root only this week; pi also searches parent directories and `CLAUDE.md` variants ([`resource-loader.ts` L212](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/resource-loader.ts#L212)), which you don't need yet.
+3. Read each pi file side by side with the rig file you wrote for the same job: [`edit-diff.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/tools/edit-diff.ts) vs. your `edit_file` v2; [`file-mutation-queue.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/tools/file-mutation-queue.ts) (61 lines) vs. your path lock; [`truncate.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/tools/truncate.ts#L78) (`truncateHead` L78, `truncateTail` L168) vs. your Week 1 `truncate`; `agent-session.ts` [`_queueSteer`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/agent-session.ts#L2302-L2327) and [`abort`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/agent-session.ts#L2498-L2508) vs. your `cli/main.py`. Then Aider's edit cascade for contrast: [`perfect_replace`](https://github.com/Aider-AI/aider/blob/5dc9490bb35f9729ef2c95d00a19ccd30c26339c/aider/coders/editblock_coder.py#L146) → [`replace_part_with_missing_leading_whitespace`](https://github.com/Aider-AI/aider/blob/5dc9490bb35f9729ef2c95d00a19ccd30c26339c/aider/coders/editblock_coder.py#L243) → [`try_dotdotdots`](https://github.com/Aider-AI/aider/blob/5dc9490bb35f9729ef2c95d00a19ccd30c26339c/aider/coders/editblock_coder.py#L190) → [`replace_closest_edit_distance`](https://github.com/Aider-AI/aider/blob/5dc9490bb35f9729ef2c95d00a19ccd30c26339c/aider/coders/editblock_coder.py#L296), which is unreachable at this commit: a bare `return` comes just before its call ([L183–186](https://github.com/Aider-AI/aider/blob/5dc9490bb35f9729ef2c95d00a19ccd30c26339c/aider/coders/editblock_coder.py#L183-L186)), so Aider's fuzzy edit-distance match is switched off. Notice also that `perfect_replace` takes the first match without checking it is the only one. Finish with **Industry contrast** in the Read section below: what Claude Code, Codex and Gemini CLI do for the same job.
+4. Trace the paths in **Read: pi (main) and Aider's edit blocks (contrast)** below: the happy path, then the failure path.
+5. Answer questions 1 to 4 in **You should be able to answer** from the trace alone.
 
-**Done when:** that test passes and you can answer questions 1 to 4 without reopening pi.
+Tests: in `tests/test_providers.py`, give `OpenAIChatProvider` a stub client that returns hand-built chunks for a turn with two tool calls whose argument strings are split across chunks, and check that two `ToolCall`s with parsed arguments come out in `index` order and the `TurnEnd` has `stop_reason="tool_use"`; `to_request` turns three `ToolResult`s into three `tool` messages. In a `tmp_path` workspace with an `AGENTS.md` containing a marker string, the first `Context` the `FakeProvider` receives has the marker inside `<project_instructions>`; without the file, the system prompt is unchanged from Week 1.
+
+**Done when:** those tests pass; `python evals/run_evals.py --task-id T04 --provider openai` and `--provider openrouter` both pass; and you can answer questions 1 to 4 without reopening pi.
 
 ### Friday — break the harness on purpose.
 **Goal.** Numbers on which of Tuesday's and Wednesday's changes actually mattered.
 
 **Why.** Parallelism and stricter edits both have costs; the only honest way to know if they pay for themselves is to turn them off and measure.
 
-Run Experiments 1 to 3 against T04 to T11 and write pass rate, steps, tokens and the trace step where behavior diverged into `notes/week2-experiments.md`. Experiment 1: flip one setting, the same way pi switches [`toolExecution`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/types.ts#L317) between `"parallel"` and `"sequential"`. Experiment 2: Aider's SEARCH/REPLACE format, parsed from plain text and applied with the cascade you read Thursday. Experiment 3: port [`fuzzyFindText`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/tools/edit-diff.ts#L207) and [`normalizeForFuzzyMatch`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/tools/edit-diff.ts#L34) as a fallback, seed a file with two near-identical blocks, and find the prompt that makes it edit the wrong one.
+Run Experiments 1 to 3 against T04 to T11 and write pass rate, steps, tokens and the trace step where behavior diverged into `notes/week2-experiments.md`. Experiment 1: flip one setting, the same way pi switches [`toolExecution`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/types.ts#L317) between `"parallel"` and `"sequential"`. Experiment 2: Aider's SEARCH/REPLACE format, parsed from plain text and applied with the cascade you read Thursday; if you have an OpenAI model, also Codex's `apply_patch` format, which OpenAI's models are trained on, as Anthropic's are on string-replace edits. Experiment 3: port [`fuzzyFindText`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/tools/edit-diff.ts#L207) and [`normalizeForFuzzyMatch`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/tools/edit-diff.ts#L34) as a fallback that reports itself in the result ("matched ignoring whitespace at line N", as Gemini CLI and OpenCode do), seed a file with two near-identical blocks, and find the prompt that makes it edit the wrong one.
 
 ### Saturday — the rest of the experiments, then the project increment.
 **Goal.** Kill-and-resume proven on a real run; four new tasks of your own in the regression suite.
 
 **Why.** v0.2 is judged on tasks you design, not only ones handed to you — writing a task whose hidden test fails before the fix is the skill.
 
-1. Experiment 4: kill rig mid-tool (`kill -9`, not Ctrl-C), `rig resume`, check the API accepts the transcript; then `rig fork` from step 3 and rerun. Experiment 5: point `Provider` at a second API and list every normalization you needed — pi's list is a good checklist: tool-call ID formats ([`transform-messages.ts` L86–90](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/transform-messages.ts#L86-L95)), reasoning from another model ([L128–137](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/transform-messages.ts#L128-L137)), orphaned tool calls ([L179–207](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/transform-messages.ts#L179-L207)), stop reasons, usage fields.
+1. Experiment 4: kill rig mid-tool (`kill -9`, not Ctrl-C), `rig resume`, check the API accepts the transcript; then `rig fork` from step 3 and rerun. Experiment 5: you built the second provider on Thursday; now run T01 to T12 once on each of Anthropic, OpenAI and OpenRouter, and record in `notes/week2-experiments.md` the pass rate and cost per provider and every normalization you needed — pi's list is a good checklist: tool-call ID formats ([`transform-messages.ts` L86–90](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/transform-messages.ts#L86-L95)), reasoning from another model ([L128–137](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/transform-messages.ts#L128-L137)), orphaned tool calls ([L179–207](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/transform-messages.ts#L179-L207)), stop reasons, usage fields.
 2. Write T13 to T16 per **Project increment** below, appended to `evals/tasks/week1.yaml` with hidden tests in `evals/hidden/`. Confirm each hidden test fails on a fresh `create_snapshot()` of click before you call the task done — the same recipe as T10 and T11.
 3. Run the CLI end to end on all four: streaming output, a steer message injected mid-run, a resumed session.
 
@@ -1199,16 +1312,18 @@ Run Experiments 1 to 3 against T04 to T11 and write pass rate, steps, tokens and
 3. Answer the remaining questions in **You should be able to answer**, then attempt **Checkpoint**. If any item fails, redo that day rather than carrying the gap into Week 3.
 
 ## Build
-1. [ ] `rig/providers/base.py`: a `Provider` protocol with `stream(request) -> Iterator[Event]`. Implement `anthropic.py` (now via the official SDK, streaming) and `fake.py`, a scripted provider for deterministic tests. Optional third: any OpenAI-compatible endpoint, to feel the normalization pain.
-2. [ ] `rig/runtime.py`: the loop as a generator of events. Hooks: `before_tool(call) -> allow | deny(reason)`, `after_tool(call, result) -> result`, `prepare_request(messages) -> messages`.
+1. [ ] `rig/providers/types.py`: rig's own message and event types and a `Provider` protocol with `stream(context) -> Generator[Event]`. Implement `anthropic.py` (now via the official SDK, streaming) and `fake.py`, a scripted provider for deterministic tests.
+2. [ ] `rig/core/runtime.py`: the loop as a generator of events. Hooks: `before_tool(call) -> allow | deny(reason)`, `after_tool(call, result) -> result`, `prepare_request(messages) -> messages`.
 3. [ ] Parallel execution with `concurrent.futures` for tools marked `read_only=True`; mutating tools run sequentially, and a per-path lock guards `edit_file`.
 4. [ ] Ctrl-C handling: the first press aborts the current model stream or tool and appends synthetic results; the second exits. Add a `steer` queue the CLI fills while the agent runs.
-5. [ ] `edit_file` v2: normalize CRLF to LF for matching and restore on write; accept a list of edits applied atomically (all or nothing); if an exact match fails, report the closest candidate lines in the error instead of silently applying a fuzzy match.
-6. [ ] `rig/session.py`: append-only JSONL entries `{id, parent_id, type, payload}`; `rig resume <session>` and `rig fork <session> <entry_id>`.
+5. [ ] `edit_file` v2: normalize CRLF to LF for matching and restore on write; accept a list of edits applied atomically (all or nothing), each with an optional `replace_all`; if an exact match fails, report the closest candidate lines (and whether the edit looks already applied) instead of silently applying a fuzzy match.
+6. [ ] `rig/core/session.py`: append-only JSONL entries `{id, parent_id, type, payload}`; `rig resume <session>` and `rig fork <session> <entry_id>`.
 7. [ ] Load `AGENTS.md` from the repo root into the system prompt inside a clearly delimited block.
+8. [ ] `rig/providers/openai_chat.py`: one Chat Completions adapter for OpenAI, OpenRouter and any OpenAI-compatible endpoint, chosen with `--provider`. The runtime, session log and trace use rig's own message types, never a vendor's JSON.
+9. [ ] The `rig/cli/` package and `rig/core/config.py`: the `rig` subcommands as one Typer app, and layered config (defaults, `~/.config/rig/config.json`, the project's `.rig/config.json`, `RIG_*` variables, flags) with `rig config get|set|unset|list`.
 
 ## Project increment
-rig v0.2: a streaming CLI with interruptible runs and resumable sessions. Write four multi-file tasks of your own for the eval set (T13 to T16). One example: "Add a `click.Port` parameter type that accepts integers 1 to 65535, is exported from `click/__init__.py`, and describes its range in `--help`", graded by a hidden test you write first and confirm fails on the clean tree.
+rig v0.2: a streaming CLI with interruptible runs and resumable sessions that runs on Anthropic, OpenAI or OpenRouter. Write four multi-file tasks of your own for the eval set (T13 to T16). One example: "Add a `click.Port` parameter type that accepts integers 1 to 65535, is exported from `click/__init__.py`, and describes its range in `--help`", graded by a hidden test you write first and confirm fails on the clean tree.
 
 ## Read: pi (main) and Aider's edit blocks (contrast)
 The day-by-day sections above link straight to the lines each day needs. This section is the consolidated map, plus the two paths to trace on Thursday.
@@ -1218,13 +1333,22 @@ The day-by-day sections above link straight to the lines each day needs. This se
 1. [`packages/agent/src/agent-loop.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent-loop.ts): `runLoop` (L172), `streamAssistantResponse` (L390), `failToolCallsFromTruncatedMessage` (L488), `executeToolCalls` (L518), `executeToolCallsParallel` (L596), `prepareToolCall` (L718).
 2. [`packages/agent/src/types.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/types.ts#L193): `AgentLoopConfig`, especially `convertToLlm`, `transformContext`, `prepareRequest`, `prepareNextTurn`, `finishTurn`, `getSteeringMessages`, `getFollowUpMessages`, `beforeToolCall`, `afterToolCall`.
 3. [`packages/agent/src/agent.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/agent/src/agent.ts#L194): the stateful `Agent` wrapper — `prompt` (L382), `continue` (L393), `createLoopConfig` (L476), `processEvents` (L575).
-4. [`packages/ai/src/api/transform-messages.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/transform-messages.ts#L91): `transformMessages`, the cross-provider normalization step.
+4. [`packages/ai/src/api/transform-messages.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/transform-messages.ts#L91): `transformMessages`, the cross-provider normalization step; then [`packages/ai/src/api/openai-completions.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/openai-completions.ts#L309), the Chat Completions adapter that also serves OpenRouter: `stream` (L309), `convertMessages` (L1204), `convertTools` (L1497), `parseChunkUsage` (L1534), `mapStopReason` (L1582).
 5. [`packages/coding-agent/src/core/tools/`](https://github.com/earendil-works/pi/tree/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/tools): `edit.ts` with `edit-diff.ts` (`normalizeToLF`, `detectLineEnding`, `fuzzyFindText`), `truncate.ts` (`truncateHead`, `truncateTail`; defaults of 2,000 lines and 50 KB), `file-mutation-queue.ts` (`withFileMutationQueue`, 61 lines), `bash.ts`.
 6. [`packages/coding-agent/src/core/system-prompt.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/system-prompt.ts) (`buildSystemPromptSections`, `renderProjectContext`) and the context-file candidates in [`resource-loader.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/resource-loader.ts#L212) (`AGENTS.md`, `CLAUDE.md` and variants).
 7. [`packages/coding-agent/src/core/session-manager.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/session-manager.ts): the entry types near the top, then `appendMessage` (L1204), `getBranch` (L1469), `buildSessionContext` (L1497), `branch` (L1579).
 8. [`packages/coding-agent/src/core/agent-session.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/agent-session.ts) is 4,458 lines; read only `prompt` (L2092), `_startRun` (L1873), `_handlePostAgentRun` (L1979), `_queueSteer` (L2302), `abort` (L2498), `_isRetryableError` (L3769), `_prepareRetry` (L3822) and `_omitRecoveryAttempt` (L1244). Skip compaction, virtual models and the extension system — those are later weeks' topics.
 
-**[Aider-AI/aider](https://github.com/Aider-AI/aider)**, one file only: [`aider/coders/editblock_coder.py`](https://github.com/Aider-AI/aider/blob/5dc9490bb35f9729ef2c95d00a19ccd30c26339c/aider/coders/editblock_coder.py). Aider asks the model for SEARCH/REPLACE blocks in plain text, then applies them through a cascade: `perfect_replace` → `replace_part_with_missing_leading_whitespace` → `try_dotdotdots` → `replace_closest_edit_distance`. Reading it next to pi's `edit-diff.ts` shows the whole design space of edit formats in 30 minutes.
+**[Aider-AI/aider](https://github.com/Aider-AI/aider)**, one file only: [`aider/coders/editblock_coder.py`](https://github.com/Aider-AI/aider/blob/5dc9490bb35f9729ef2c95d00a19ccd30c26339c/aider/coders/editblock_coder.py). Aider asks the model for SEARCH/REPLACE blocks in plain text, then applies them through a cascade: `perfect_replace` → `replace_part_with_missing_leading_whitespace` → `try_dotdotdots` (the last step, `replace_closest_edit_distance`, is unreachable at this commit). Reading it next to pi's `edit-diff.ts` shows the whole design space of edit formats in 30 minutes.
+
+**Industry contrast (15 minutes).** Every widely used tool starts with an exact match; they split on what happens next.
+
+- **Claude Code** (closed source; its rules are documented in the [tools reference](https://code.claude.com/docs/en/tools-reference#edit-tool-behavior)): exact `old_string` only, "no regex or fuzzy matching"; it must occur once unless `replace_all` is set; the model must have read the file first, and an edit to a file changed since that read still applies only if it matches the current content exactly.
+- **Codex CLI** (open source): edits are a patch format, `*** Update File:` and `@@` context lines, sent as a [grammar-constrained tool](https://github.com/openai/codex/blob/a09812981de703f18f38015cd5d500ab373f616c/codex-rs/core/assets/tools/apply_patch.lark), so one call can add, delete and edit several files. [`seek_sequence`](https://github.com/openai/codex/blob/a09812981de703f18f38015cd5d500ab373f616c/codex-rs/apply-patch/src/seek_sequence.rs) matches exact, then ignoring trailing whitespace, then ignoring all surrounding whitespace, then with Unicode dashes and quotes normalized: pi's fallback, nearly line for line. It takes the first match rather than requiring a unique one; `@@` anchors and searching each chunk after the previous one narrow it instead ([`compute_replacements`](https://github.com/openai/codex/blob/a09812981de703f18f38015cd5d500ab373f616c/codex-rs/apply-patch/src/file_update.rs#L60-L170)).
+- **Gemini CLI** (open source): the most forgiving [cascade](https://github.com/google-gemini/gemini-cli/blob/6814e00d6b148c3a1d57244d5d7040f7c541009d/packages/core/src/tools/edit.ts#L306-L359), exact, then trimmed lines re-indented, then regex, then Levenshtein within 10%, and it [tells the model](https://github.com/google-gemini/gemini-cli/blob/6814e00d6b148c3a1d57244d5d7040f7c541009d/packages/core/src/tools/edit.ts#L1416-L1428) when the fuzzy step fired. It also built a second model call that rewrites a failed edit, and now ships it [off by default](https://github.com/google-gemini/gemini-cli/blob/6814e00d6b148c3a1d57244d5d7040f7c541009d/packages/core/src/config/config.ts#L1147).
+- **OpenCode** (open source): Claude Code's rules plus pi's narrow fallback, with the fallback stated in the [tool description](https://github.com/sst/opencode/blob/ff90ed91607cabf420a369e9009539c1aa0932af/packages/core/src/tool/plugin/edit.ts#L275) so the model knows the contract.
+
+The pattern: the edit format follows what the model was trained on (OpenAI's models on `apply_patch`, Anthropic's on string-replace edits), and the tools that do fall back narrowly and say so. Place rig's `edit_file` v2 on each of those axes before Friday.
 
 **Trace this path in pi:** a user prompt enters `AgentSession.prompt` (L2092) → `_startRun` (L1873) → `this.agent.prompt(messages)` (L1899) → `Agent.prompt` → `runPromptMessages` → `runAgentLoop` → `runLoop` → `prepareRequest` hook → `streamAssistantResponse` (provider stream, events re-emitted) → stop reason check → `executeToolCalls` → `prepareToolCall` (argument validation, `beforeToolCall`) → tool `execute` (for edits, inside `withFileMutationQueue`) → `finalizeExecutedToolCall` (`afterToolCall`) → ordered tool-result messages → `finishTurn` → steering poll → next iteration. Then trace one failure: a provider 529 surfacing as an error message, back in `_startRun`'s loop `_handlePostAgentRun` (L1979) → `_isRetryableError` → backoff in `_prepareRetry` → `_omitRecoveryAttempt` hiding the failed attempt from future context by appending a context-edit entry, without deleting it from the log.
 
@@ -1240,11 +1364,13 @@ If you want a third data point, open a few of your own Claude Code transcripts (
 7. [ ] Why is the agent's message type different from the provider's message type, and where does `convertToLlm` run?
 8. [ ] How does a branched session rebuild the model's context from a leaf entry?
 9. [ ] Why does `_omitRecoveryAttempt` append a context-edit entry instead of deleting the failed message?
+10. [ ] Which differences between Anthropic's Messages API and OpenAI's Chat Completions does each adapter absorb, and why is thinking written by one model dropped before the conversation goes to another?
+11. [ ] Why does `rig config set` rewrite one key in one file instead of saving the merged config, and why must `base_url` never come from a project file?
 
 ## Experiments
 1. [ ] Run rig's eval set with parallel read-only tools on and off. Record wall time and whether results change.
-2. [ ] Swap rig's `edit_file` for an Aider-style SEARCH/REPLACE text format (no tool call) on T04 to T11. Compare edit failures and wrong-location edits.
-3. [ ] Add a fuzzy-match fallback to `edit_file`, then seed a file with two near-identical blocks. Find a prompt that makes it edit the wrong one.
+2. [ ] Swap rig's `edit_file` for an Aider-style SEARCH/REPLACE text format (no tool call) on T04 to T11. Compare edit failures and wrong-location edits. With an OpenAI model, add Codex's `apply_patch` format as a third arm: the question is less which format is best than which one this model was trained on.
+3. [ ] Add a fuzzy-match fallback to `edit_file` that tells the model when it fired, then seed a file with two near-identical blocks. Find a prompt that makes it edit the wrong one, and compare with no fallback at all, Claude Code's choice.
 4. [ ] Kill rig mid-tool, resume the session, and check the transcript is still valid for the API. Then fork from step 3 and rerun.
 5. [ ] Point the provider interface at a second provider and list every normalization you needed (tool-call id formats, system prompt placement, stop reasons, usage fields).
 
@@ -1253,14 +1379,16 @@ If you want a third data point, open a few of your own Claude Code transcripts (
 - **Cancellation semantics** are an API contract: every abort path has a test that the next request is valid.
 - **Provider failures** become a typed error enum (retryable overload, rate limit, invalid request, context overflow, auth) instead of string matching.
 - **Rate limits** under parallel evals: a shared token bucket across runs, not per-run backoff alone.
+- **Config files are untrusted input.** A project's `.rig/config.json` arrives with every clone. Anything that changes where requests go or what runs (endpoints, later hooks and MCP servers) must come from the user's own file or an explicit trust decision, the way pi's `defaultProjectTrust` can only be set in the user's settings.
 
 ## Not yet
-Other harnesses (OpenCode, Codex CLI, OpenHands) beyond the files named here; pi's `packages/durable`, `mcp`, `server` and `codemode`; TUI rendering code; provider-specific features such as server-side tools.
+Other harnesses (OpenCode, Codex CLI, Gemini CLI, OpenHands) beyond the files named here; Cursor's separate apply model, which rewrites the whole file from the main model's sketch ([Instant Apply](https://cursor.com/blog/instant-apply)); running a formatter or language server after each edit, as OpenCode does; checkpoints that rewind the agent's edits, as Claude Code's do; a read-before-edit guard, which matters once rig has a whole-file write tool; pi's `packages/durable`, `mcp`, `server` and `codemode`; TUI rendering code; provider-specific features such as server-side tools; OpenAI's Responses API (better for its reasoning models, but served only by OpenAI); choosing between providers per request, which a later week's model router covers; an interactive `rig shell` with `/` commands, which Week 12 builds on this week's command registry.
 
 ## Checkpoint
 - [ ] You can draw pi's three layers and place every file you read in one of them.
 - [ ] Ctrl-C at any moment (during streaming, during a parallel batch, during an edit) leaves a session that resumes and passes API validation. You have a test for each case.
 - [ ] On T01 to T16, rig v0.2 is no worse than v0.1 on pass^3, and you can explain any task whose result changed by pointing at trace events.
+- [ ] T04 passes on Anthropic, OpenAI and OpenRouter by changing only `--provider`, and `runtime.py` imports no vendor SDK.
 
 ---
 
@@ -1268,24 +1396,322 @@ Other harnesses (OpenCode, Codex CLI, OpenHands) beyond the files named here; pi
 
 *Phase: The machine · Primary reading/code: pi compaction, SGLang radix cache*
 
-Context engineering is one decision made before every request: which bytes go in, in what order. This week you make that decision explicit and measured, and you learn that prompt caching is the transformer's key/value cache exposed as a billing feature.
+**This week**
 
-Reference code on this page is pinned so line numbers never drift: [pi](https://github.com/earendil-works/pi) at `136b87e` (as in Week 2), [SGLang](https://github.com/sgl-project/sglang) at `b068417`, [vLLM](https://github.com/vllm-project/vllm) at `bfa2a43`, and [Codex](https://github.com/openai/codex) at `aa854da`. Clone each into `reading/` and `git checkout` that commit; record them in `reading/SHAS.txt`.
+Context engineering is one decision made before every request: which bytes go in, in what order.
+- You will be able to: Say, from any trace, which part of each request came from cache and why each miss happened
+- You will be able to: Run T17 under the 40,000-token limit without an overflow error
+- You will be able to: Prove with property tests that your radix toy matches the longest prefix and never evicts a referenced node
+- You will be able to: Attribute every cache miss to a cause, and say when a 1-hour TTL beats a 5-minute one
+- You will be able to: Explain prompt caching in terms of per-layer key and value tensors
+
+## Key idea
+This week you make that decision explicit and measured.
+
+You learn that prompt caching is the transformer's key/value cache exposed as a billing feature.
+
+*Diagram — Prefix order decides what one changed byte invalidates: tools, then system, then messages. Rendered version: https://ai.labs-nature.com/study-plan/#w3*
 
 ## Concepts
-- **Token accounting by segment.** Tools, system prompt, project memory, history, latest turn. The provider's `usage` is ground truth; character-based estimates are for planning ahead of a request. [Token counting](https://platform.claude.com/docs/en/build-with-claude/token-counting) gives you an exact pre-request count when an estimate isn't good enough.
-- **The KV cache.** Each token's attention keys and values, per layer, are computed once. A new request can reuse them only for an exactly identical token prefix. Serving engines store them in a radix tree (SGLang's [`radix_cache.py`](https://github.com/sgl-project/sglang/blob/b068417bfcc19ba14e6588ce96d31e406077e6aa/python/sglang/srt/mem_cache/radix_cache.py)) or as hash-chained blocks (vLLM's [`hash_block_tokens`](https://github.com/vllm-project/vllm/blob/bfa2a433453675b0c7abcb5df163fd5e59ffe2a3/vllm/v1/core/kv_cache_utils.py#L707)).
-- **Prompt caching as an API.** Cache breakpoints mark how far a prefix may be reused; cached reads are billed far below fresh input; entries expire after a short TTL. Layout rule: stable things first (tools, system, memory), append-only history after, nothing earlier ever edited. See [Prompt caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching).
-- **Cache economics.** On the Anthropic API a 5-minute cache write costs 1.25 times the base input price, a 1-hour write 2 times, and a read 0.1 times (less on some current models). A request can carry at most 4 breakpoints, and a lookup walks back at most 20 blocks from each one. A 5-minute entry pays for itself on its first reuse; a 1-hour entry needs two. OpenAI caches prefixes automatically (1,024 tokens minimum on current models) and lets you group requests with `prompt_cache_key`. Either way, the TTL is a bet on how soon the next request arrives.
-- **What invalidates a cache** follows the prefix order tools → system → messages. Changing tool definitions invalidates everything; changing `tool_choice` or images invalidates the system and message levels, and on some models so do thinking and effort settings. Caches are per model, so a model switch starts from zero (Week 8 builds on this).
-- **Providers can shrink history for you.** Anthropic's tool-result clearing (`clear_tool_uses_20250919`, tuned with `trigger`, `keep`, `clear_at_least` and `exclude_tools` — see [Context editing](https://platform.claude.com/docs/en/build-with-claude/context-editing)) replaces old tool results with placeholders on the server, and [server-side compaction](https://platform.claude.com/docs/en/build-with-claude/compaction) summarizes on demand or at a token threshold. Build the client-side versions first so you can judge theirs.
-- **Prompt churn** is anything that changes early bytes: a timestamp in the system prompt, a re-sorted tool list, non-deterministic JSON key order, rewriting an old message.
-- **Three ways to shrink history**, cheapest first: truncate at the tool (Week 1), mask old observations with placeholders, and summarize a prefix (compaction). Each costs something: re-reads, lost detail, a cache miss.
-- **Safe cut points.** A cut must not separate a `tool_use` from its `tool_result`, and should land on a turn boundary. pi's rule is [`isCutPointMessage`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts#L351).
-- **Trigger policy.** Proactive (crossing a fraction of the window) versus reactive (the provider rejects the request as too long). You need both.
-- **Memory is prompt assembly with persistence.** Short-term memory is the transcript; working memory is a file the agent edits (a plan or todo list); long-term memory is text written at the end of one session and loaded at the start of another. Every "memory system" is a policy for who writes that text and when it is loaded.
+Every rule this week (stable bytes first, append-only history, no timestamps up top) falls out of one fact about the KV cache.
 
-## This week's objective and target layout
+**Token accounting by segment**
+
+Five segments: tools, system prompt, project memory, history, latest turn.
+
+*Estimates versus the provider's usage:*
+
+The provider's `usage` is ground truth; character-based estimates are for planning ahead of a request. [Token counting](https://platform.claude.com/docs/en/build-with-claude/token-counting) gives you an exact pre-request count when an estimate isn't good enough.
+
+**The KV cache**
+
+Each token's attention keys and values, per layer, are computed once; a new request can reuse them only for an exactly identical token prefix.
+
+*How serving engines store it:*
+
+Serving engines store them in a radix tree (SGLang's [`radix_cache.py`](https://github.com/sgl-project/sglang/blob/b068417bfcc19ba14e6588ce96d31e406077e6aa/python/sglang/srt/mem_cache/radix_cache.py)) or as hash-chained blocks (vLLM's [`hash_block_tokens`](https://github.com/vllm-project/vllm/blob/bfa2a433453675b0c7abcb5df163fd5e59ffe2a3/vllm/v1/core/kv_cache_utils.py#L707)).
+
+**Prompt caching as an API**
+
+Cache breakpoints mark how far a prefix may be reused; cached reads are billed far below fresh input; entries expire after a short TTL.
+
+*The layout rule:*
+
+Layout rule: stable things first (tools, system, memory), append-only history after, nothing earlier ever edited. See [Prompt caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching).
+
+**Cache economics**
+
+The TTL is a bet on how soon the next request arrives.
+
+- 1.25x | 5-minute cache write
+- 2x | 1-hour cache write
+- 0.1x | Cache read
+- 4 | Breakpoints per request
+
+*Break-even, lookback, and OpenAI:*
+
+Prices are on the Anthropic API, as multiples of the base input price. Reads cost less on some current models.
+
+A 5-minute entry pays for itself on its first reuse; a 1-hour entry needs two.
+
+A lookup walks back at most 20 blocks from each breakpoint.
+
+OpenAI caches prefixes automatically (1,024 tokens minimum on current models) and lets you group requests with `prompt_cache_key`.
+
+**What invalidates a cache**
+
+Invalidation follows the prefix order tools → system → messages.
+
+*What each change invalidates:*
+
+| Change | What it invalidates |
+|---|---|
+| Tool definitions | Everything |
+| `tool_choice` or images | The system and message levels |
+| Thinking and effort settings, on some models | The system and message levels |
+| The model | Everything: caches are per model, so a model switch starts from zero (Week 8 builds on this) |
+
+**Providers can shrink history for you**
+
+Anthropic's tool-result clearing and server-side compaction shrink history on the server; build the client-side versions first so you can judge theirs.
+
+*The two server features:*
+
+Tool-result clearing (`clear_tool_uses_20250919`, see [Context editing](https://platform.claude.com/docs/en/build-with-claude/context-editing)) replaces old tool results with placeholders on the server.
+
+| Setting | Tunes |
+|---|---|
+| `trigger` | When clearing starts |
+| `keep` | How many recent tool uses stay |
+| `clear_at_least` | The minimum tokens one clearing frees |
+| `exclude_tools` | Tools whose results are never cleared |
+
+[Server-side compaction](https://platform.claude.com/docs/en/build-with-claude/compaction) summarizes on demand or at a token threshold.
+
+**Prompt churn**
+
+Prompt churn is anything that changes early bytes.
+
+A timestamp in the system prompt, a re-sorted tool list, non-deterministic JSON key order, or rewriting an old message: each one changes early bytes.
+
+**Three ways to shrink history**
+
+Cheapest first: truncate at the tool (Week 1), mask old observations with placeholders, and summarize a prefix (compaction).
+
+*What each one costs:*
+
+Each costs something: re-reads, lost detail, a cache miss.
+
+**Safe cut points**
+
+A cut must not separate a `tool_use` from its `tool_result`, and should land on a turn boundary.
+
+*pi's rule:*
+
+pi's rule is [`isCutPointMessage`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts#L351).
+
+**Trigger policy**
+
+Proactive (crossing a fraction of the window) versus reactive (the provider rejects the request as too long). You need both.
+
+*Diagram — Two triggers, one compaction: proactive past 0.7 of the window, reactive on an overflow error with exactly one retry. Rendered version: https://ai.labs-nature.com/study-plan/#w3*
+
+**Memory is prompt assembly with persistence**
+
+Every "memory system" is a policy for who writes the text and when it is loaded.
+
+*Three kinds of memory:*
+
+| Kind | What it is |
+|---|---|
+| Short-term | The transcript |
+| Working | A file the agent edits (a plan or todo list) |
+| Long-term | Text written at the end of one session and loaded at the start of another |
+
+## Build
+By Sunday, every request rig sends is assembled by one explicit pipeline you can measure.
+
+- [ ] **Record token usage per segment in the trace**
+    - Files: `rig/context.py`, `evals/report.py`
+    - Done when: The eval report shows `peak_input_tokens` and `cache_read_ratio`.
+    Before each request, compute an estimate per segment; after it, record `usage` per segment in the trace.
+- [ ] **Place cache breakpoints**
+    - Files: `rig/cache_policy.py`
+    - Where: After the tool definitions and system prompt, and on the newest message
+    - Keep: History strictly append-only and serialization deterministic
+- [ ] **Mask tool outputs older than K turns**
+    - Files: `rig/shrink.py`
+    - Replace with: `[elided: 4,812 chars from read_file src/click/core.py; call again if needed]`
+- [ ] **Compact history past 70% of the window**
+    - Files: `rig/shrink.py`, `session.py`
+    - Trigger: 70% of the window, or a context-overflow error (then one retry)
+    - Method: The cheap model summarizes everything before the latest safe cut point
+    - Template: A fixed one: task · decisions · files touched with what changed · current state · next step
+    - Keep: The last few turns verbatim
+    - Store: A `compaction` entry in the session log; never delete the originals
+- [ ] **Build a radix tree over token ids and replay your traces**
+    - Files: `rig/kvtoy.py`
+    - Operations: Prefix match, insert (splitting nodes on partial matches), reference counts, LRU evict
+    - Measure: The hit rate a server would have seen on the requests from your Week 1 and 2 traces
+    The operations are `match_prefix`, `insert` and `evict`. Any tokenizer will do.
+- [ ] **Choose each breakpoint's TTL from the expected idle time**
+    - Files: `rig/cache_policy.py`
+    - Breakpoints: Placed deliberately: a 1-hour one after the tools and system prompt, a 5-minute one on the newest message
+    - Rule: 1-hour entries must come before 5-minute ones
+    - Record: The per-TTL write counts
+    - Optional: A pre-warm before a known idle gap
+    The per-TTL write counts are `cache_creation.ephemeral_5m_input_tokens` and `ephemeral_1h_input_tokens`.
+- [ ] **Build a cost ledger with a cache-miss detector**
+    - Files: `rig/ledger.py`
+    - Per request: The tokens that should have come from cache but didn't, what that cost, and the likely cause
+    - Causes: Idle past the TTL, a model switch, an edited prefix
+    - Why: Every later week reads this ledger.
+    Model it after pi's `cache-stats.ts`.
+- [ ] **Put three history shrinkers behind one interface**
+    - Files: `rig/shrink.py`
+    - Shrinkers: Your compaction, tool-result clearing (yours first, then the provider's), and the provider's server-side compaction
+- [ ] **Write an AGENTS.md for click, plus a note tool**
+    - Files: `workspaces/click/AGENTS.md`, `rig/tools/note.py`
+    - Note tool: Appends to `.rig/notes.md` (capped at 2 KB) and is loaded at session start
+
+**Day by day**
+
+#### Monday — the KV cache, before the billing feature.
+- Time: 1 to 1.5 h
+- Do: Concepts and the caching docs; the economics in your own numbers
+- Working by end of day: Half-page note: the KV cache, 5-minute vs 1-hour breakpoints, what invalidates a cache
+
+*Monday: goal, why, steps:*
+
+**Goal.** Place breakpoints tomorrow from a mental model, not by guessing: know what's being cached, what invalidates it, and when each TTL pays for itself.
+
+**Why.** Prompt caching only makes sense once you've seen what it exposes — per-layer attention keys and values computed once and reused for an identical prefix. Every rule this week (stable bytes first, append-only history, no timestamps up top) falls out of that one fact.
+
+1. Read **Concepts** above, twice through the caching bullets.
+2. Read [Prompt caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching) end to end, then skim [Context editing](https://platform.claude.com/docs/en/build-with-claude/context-editing) and [Compaction](https://platform.claude.com/docs/en/build-with-claude/compaction) — you'll compare against both on Saturday.
+3. Open one Week 2 trace and add up, per request, the input tokens that a cache *could* have served (everything before the newest message). That's the size of this week's prize.
+4. Write the half-page note: the 5-minute vs 1-hour economics with your provider's current prices, and the prefix order (tools → system → messages) that decides what one changed byte invalidates.
+
+**Done when:** you can say, for a 30,000-token prefix reused every 3 minutes for an hour, which TTL is cheaper and by roughly how much.
+#### Tuesday — the context pipeline every request runs through.
+- Time: 3 to 4 h
+- Do: Build steps 1 to 4: `context.py`, breakpoints, masking, compaction
+- Working by end of day: Per-segment token accounting in the trace; deliberate breakpoints; observation masking; compaction firing past 70% of the window
+
+*Tuesday: goal, why, steps, tests:*
+
+**Goal.** Every request is measured per segment, carries deliberate breakpoints, masks stale tool output, and compacts itself past 70% of the window.
+
+**Why.** These four steps are the path every request takes, in order: measure what you're sending, decide what's cacheable, then shrink history before it overflows anything. Getting them right first gives Wednesday's measurement tools real data.
+
+1. **`rig/context.py`** — `estimate(system, tools, messages) -> Segments` (tokens for tools, system, memory, history, latest turn; `chars / 4` is fine for planning) and `record(segments, usage)`, which writes the `Usage` your Week 2 adapter normalized (`input_tokens`, `cache_read_tokens`, `cache_write_tokens`) into the trace next to the estimate. Add `peak_input_tokens` and `cache_read_ratio` to `evals/report.py`. pi's estimator is [`estimateTokens`, L298](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts#L298).
+2. **Breakpoints, in `cache_policy.py`** — breakpoints are an Anthropic request feature, so `place(body, ttl)` works on the request body `AnthropicProvider.to_request` built, not on rig's messages: give `AnthropicProvider` an optional `transform(body) -> body` that runs after `to_request`, and pass `place` as it. `place` puts `cache_control` on the last tool definition, on the system prompt, and on the last block of the newest message: three of your four allowed breakpoints. OpenAI caches matching prefixes without markers by default ([prompt caching](https://developers.openai.com/api/docs/guides/prompt-caching)), so `openai_chat.py` needs no transform; for OpenRouter, which models accept markers depends on the upstream provider ([prompt caching](https://openrouter.ai/docs/features/prompt-caching)). pi places Anthropic's markers inside its Anthropic adapter too: tools at [L1677](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/anthropic-messages.ts#L1677), history at [L1547–1568](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/anthropic-messages.ts#L1547-L1568). Then remove every source of churn: serialize tool schemas with `json.dumps(..., sort_keys=True)`, register tools in a fixed order, and keep the date or cwd out of the system prompt (append it to the newest user message instead).
+3. **Masking, in `shrink.py`** — `Masking.view(messages, keep_turns=K)` returns a copy where every tool result older than K turns becomes `[elided: 4,812 chars from read_file src/click/core.py; call again if needed]`. Opinion: mask in batches — only when the oldest unmasked result is 2K turns old, mask everything older than K in one go — because every masking pass changes early bytes and costs one cache miss; batching turns a miss per turn into a miss every K turns.
+4. **Compaction, in `shrink.py`** — `Compaction.shrink(messages)`: find the latest safe cut point (a turn boundary that doesn't split a `tool_use` from its `tool_result`), summarize everything before it with the cheap model and a fixed template (task, decisions, files touched with what changed, current state, next step), keep the turns after it verbatim, and return `[summary_message, *kept]`. Store a `compaction` entry in `session.py` holding the summary and the id of the first kept entry; `branch()` then replays summary + kept, and the originals stay in the file. pi's versions: [`isCutPointMessage`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts#L351-L393), [`findValidCutPoints`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts#L394), [`findCutPoint`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts#L446), [`prepareCompaction`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts#L859), [`compact`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts#L952).
+5. **Wire both triggers in `agent.py`** — proactive inside `prepare_request` (past 0.7 of the window, pi's [`shouldCompact`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts#L267)), reactive around `runtime.run()`: each provider adapter raises a typed `ContextOverflow` for its own "too long" error, the agent compacts and retries exactly once.
+
+The cut-point search, which is where most compaction bugs live:
+
+```python file=rig/shrink.py
+def latest_safe_cut(messages, keep_tail_tokens):
+    budget, i = keep_tail_tokens, len(messages)
+    while i > 0 and budget > 0:                         # walk back until the tail is big enough
+        i -= 1; budget -= est(messages[i])
+    for j in range(i, 0, -1):                           # then back to a boundary that's safe to cut
+        if messages[j]["role"] == "user" and not is_tool_result(messages[j]):
+            return j                                    # a real user turn: no open tool call before it
+    return None                                         # nothing safe: mask instead, don't compact
+```
+
+Tests: `test_context.py` — estimates within 20% of a recorded `usage` on a saved request. `test_cache_policy.py` — the same messages serialize to identical bytes twice; there are never more than four breakpoints. `test_shrink.py` — no compaction ever leaves a `tool_use` without its `tool_result`; masking never touches the last K turns; compacting twice at the same cut point produces one entry (key it by the cut-point entry id).
+
+**Done when:** a long Week 2 task run shows per-segment usage in its trace, a nonzero `cache_read_tokens` from the second request on, and — with the window artificially set to 20,000 — one compaction entry and a run that still finishes.
+#### Wednesday — measuring what Tuesday's pipeline actually does.
+- Time: 3 to 4 h
+- Do: Build steps 5 to 9: `kvtoy.py`, `cache_policy.py`, `ledger.py`, the `Shrinker` interface, memory
+- Working by end of day: A radix-tree toy with a measured hit rate; a TTL policy with pre-warm; a cache-miss ledger; three shrinkers behind one interface; `AGENTS.md` plus the `note` tool
+
+*Wednesday: goal, why, steps, tests:*
+
+**Goal.** Proof, not plumbing: a radix toy that shows what a server could reuse, a TTL policy, a ledger that prices every miss, one interface over four ways to shrink history, and the first piece of memory.
+
+**Why.** Tuesday's pipeline is a set of bets. Today you build the instruments that tell you whether the bets paid — and the toy makes the data structure behind a real server stop being a black box.
+
+1. **`rig/kvtoy.py`** — `RadixTree` with `match_prefix(ids) -> (n_matched, node)`, `insert(ids)` (splitting a node when a new key diverges partway along an edge), per-node `ref_count`, and `evict(n)` that frees least-recently-used *leaves* with `ref_count == 0` only. Tokenize with any tokenizer (`pip install tiktoken`; `o200k_base` is fine — the hit rate depends on prefix structure, not the exact ids). Replay every request from your Week 1 and 2 traces in order and report `matched / total` tokens. SGLang's real one: [`match_prefix`](https://github.com/sgl-project/sglang/blob/b068417bfcc19ba14e6588ce96d31e406077e6aa/python/sglang/srt/mem_cache/radix_cache.py#L364), [`insert`](https://github.com/sgl-project/sglang/blob/b068417bfcc19ba14e6588ce96d31e406077e6aa/python/sglang/srt/mem_cache/radix_cache.py#L428), [`evict`](https://github.com/sgl-project/sglang/blob/b068417bfcc19ba14e6588ce96d31e406077e6aa/python/sglang/srt/mem_cache/radix_cache.py#L552), [`_split_node`](https://github.com/sgl-project/sglang/blob/b068417bfcc19ba14e6588ce96d31e406077e6aa/python/sglang/srt/mem_cache/radix_cache.py#L677).
+2. **`cache_policy.py`, TTLs** — a 1-hour breakpoint after tools and system, a 5-minute one on the newest message (1-hour entries must come before 5-minute ones); `choose_ttl(expected_idle_s)` picks 1 hour only when the expected gap exceeds 5 minutes and the prefix will be reused at least twice. Record `cache_creation.ephemeral_5m_input_tokens` and `ephemeral_1h_input_tokens` per request. Add `prewarm()`: before a known idle gap (waiting on a long tool, a human), send a minimal request that rewrites the entry — and only when the ledger says it's cheaper than a miss, which is pi's [`CacheWarmer.evaluate`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/cache-warmer.ts#L378) decision.
+3. **`rig/ledger.py`** — per request, compare the previous request's cacheable prefix with this request's `cache_read_tokens`; the shortfall is a miss. Price it (shortfall × (write price − read price)) and assign a cause: idle past the TTL, model switch, edited prefix (find the first differing segment), or a breakpoint moved. pi's [`detectMiss`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/cache-stats.ts#L56-L147) and [`computeCacheWaste`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/cache-stats.ts#L148). Every later week reads this file's output.
+4. **The `Shrinker` interface, in `shrink.py`** — `shrink(messages) -> (messages, entry)`, implemented by `Compaction` (Tuesday), `ToolResultClearing` (yours: replace tool results older than `keep` uses until at least `clear_at_least` tokens are freed), `ProviderClearing` (sends `clear_tool_uses_20250919` per [Context editing](https://platform.claude.com/docs/en/build-with-claude/context-editing) and returns messages unchanged), and `ServerCompaction` (per [Compaction](https://platform.claude.com/docs/en/build-with-claude/compaction)). The last two are Anthropic API features: on any other provider the agent falls back to `Compaction`. The agent picks one by name from config, so Saturday's Experiment 6 is a flag.
+5. **Memory** — write `workspaces/click/AGENTS.md` yourself (layout, test command, conventions — the things the agent re-discovers every run), and add `tools/note.py`: `note(text)` appends to `.rig/notes.md`, refusing once the file would pass 2 KB; `agent.py` loads it into the system prompt at session start, after `AGENTS.md`.
+
+Tests: `test_kvtoy.py` — property tests (`hypothesis`, or 1,000 random token lists): `match_prefix` always returns the longest stored prefix; `evict` never frees a node with `ref_count > 0`; inserting then matching the same list matches all of it. `test_ledger.py` — two identical requests five seconds apart show no miss; a changed tool schema shows a miss caused by an edited prefix. `test_shrink.py` — every `Shrinker` returns messages that pass the Week 2 orphan check.
+
+**Done when:** `kvtoy` prints a hit rate for your Week 2 traces, and a Week 2 task run produces a ledger with zero unexplained misses.
+#### Thursday — read pi's compactor and SGLang's radix cache.
+- Time: 1.5 to 2 h
+- Do: Read pi's compaction and cache accounting, and SGLang's radix cache, against your own code
+- Working by end of day: You can narrate the proactive and reactive compaction paths from memory
+
+*Thursday: goal, why, what to read:*
+
+**Goal.** Narrate pi's proactive and reactive compaction paths from memory, and answer questions 1, 2, 5 and 6 from the reading alone.
+
+**Why.** pi's compactor handles every edge case you just built against (cut points, idempotency, cache-warming economics) in a file small enough to read in one sitting, and SGLang's radix cache is what your toy was a toy of. Reading both the day after building yours gives you a diff, not a tutorial.
+
+1. Read pi's [`compaction.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts) side by side with your `shrink.py`: settings ([L126](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts#L126)), cut points ([L351–445](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts#L351-L445)), [`generateSummary`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts#L644) — compare its prompt with yours and with Codex's 9-line [compaction prompt](https://github.com/openai/codex/blob/aa854dabf54e1dd6c2bda80653944b4f2c0672d7/codex-rs/prompts/templates/compact/prompt.md).
+2. Read pi's [`cache-warmer.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/cache-warmer.ts) (`getCacheWarmingDelayMs` L29, `getPromptCacheTtlMs` L39, `evaluate` L378) against your `cache_policy.py`, and [`cache-stats.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/cache-stats.ts) (174 lines) against your `ledger.py`.
+3. Read SGLang's `radix_cache.py` against your `kvtoy.py`: [`match_prefix`](https://github.com/sgl-project/sglang/blob/b068417bfcc19ba14e6588ce96d31e406077e6aa/python/sglang/srt/mem_cache/radix_cache.py#L364), [`insert`](https://github.com/sgl-project/sglang/blob/b068417bfcc19ba14e6588ce96d31e406077e6aa/python/sglang/srt/mem_cache/radix_cache.py#L428), [`evict`](https://github.com/sgl-project/sglang/blob/b068417bfcc19ba14e6588ce96d31e406077e6aa/python/sglang/srt/mem_cache/radix_cache.py#L552), [`_match_prefix_helper`](https://github.com/sgl-project/sglang/blob/b068417bfcc19ba14e6588ce96d31e406077e6aa/python/sglang/srt/mem_cache/radix_cache.py#L651), [`_split_node`](https://github.com/sgl-project/sglang/blob/b068417bfcc19ba14e6588ce96d31e406077e6aa/python/sglang/srt/mem_cache/radix_cache.py#L677). Then skim vLLM's hash-chained alternative: [`hash_block_tokens`](https://github.com/vllm-project/vllm/blob/bfa2a433453675b0c7abcb5df163fd5e59ffe2a3/vllm/v1/core/kv_cache_utils.py#L707) and [`get_computed_blocks`](https://github.com/vllm-project/vllm/blob/bfa2a433453675b0c7abcb5df163fd5e59ffe2a3/vllm/v1/core/kv_cache_manager.py#L266).
+4. Trace both paths in **Read** below: the proactive compaction path and the reactive overflow path.
+5. Answer questions 1, 2, 5 and 6 in **You should be able to answer** from the reading alone.
+
+**Done when:** you can draw pi's proactive path from turn end to the next request, naming each function.
+#### Friday — cheap experiments only.
+- Time: 1 to 1.5 h
+- Do: Experiments 1, 2 and 4
+- Working by end of day: Cache-read ratio with caching on and off; the timestamp-churn demo and its fix; free-form vs templated summaries
+
+*Friday: goal, why, how to run them:*
+
+**Goal.** See the shape of caching in your own numbers before the weekend puts dollar figures on it.
+
+**Why.** Three quick runs make the rules from Monday visible: caching on vs off, one timestamp destroying a cache, and how much a summary's template matters.
+
+Run Experiments 1, 2 and 4 below. For Experiment 1, make caching a flag in `cache_policy.py` (`place()` returns the request body untouched when off) and run the eval set both ways. For Experiment 2, put `datetime.now()` at the top of the system prompt, watch `cache_read_tokens` drop to zero in the ledger with cause "edited prefix", then move it to the newest user message and watch reads recover. For Experiment 4, swap `Compaction`'s template for "Summarize the conversation so far" on T17 and compare. Write results to `notes/week3-experiments.md`.
+
+**Done when:** the note has the cache-read ratio and dollars per task both ways, and the ledger screenshot (or excerpt) of the timestamp miss.
+#### Saturday — T17, and the expensive experiments.
+- Time: 3 to 4 h
+- Do: **Project increment**: T17 under a 40,000-token limit; Experiments 3, 5 and 6
+- Working by end of day: T17 passes without overflow; the TTL bet computed in dollars; compaction vs clearing vs server compaction compared
+
+*Saturday: goal, why, steps:*
+
+**Goal.** T17 — all four Week 1 bugs in one session under a 40,000-token limit — passes because compaction fires for real.
+
+**Why.** T17 is the task this whole week was for. Stack the experiments that need many paid runs onto the same day you're paying for runs anyway.
+
+1. Add T17 to `evals/tasks/week1.yaml` per **Project increment** below: its seed is the T04, T05, T07 and T09 patches concatenated (apply them in that order to one snapshot; they touch different files), its grader is the union of their selectors plus the full suite. Add a per-task `context_limit: 40000` that `run_evals.py` passes into the agent. Confirm it overflows with history management off.
+2. Run Experiment 3: masking only, compaction only, both — and count re-reads (a `read_file` of a path already read before the last compaction). That's your forgetting metric.
+3. Run Experiment 5, the TTL bet: replay one long session at 2, 8 and 40-minute idle gaps under both TTLs, with and without pre-warming; compute dollars per session from the per-TTL usage fields.
+4. Run Experiment 6 by switching the `Shrinker` flag: your compaction vs your clearing vs provider clearing at `clear_at_least` 0 and 5,000 vs server compaction — pass rate, misses caused (from the ledger), dollars.
+
+**Done when:** T17 passes without an overflow error, and the report shows compaction's cost as its own line.
+#### Sunday — the last experiment, then the checkpoint.
+- Time: 2 to 3 h
+- Do: Experiment 7; answer remaining questions; attempt **Checkpoint**
+- Working by end of day: Your radix toy's hit rate reconciled against the provider's reported cache reads; checkpoint passed or a redo list
+
+*Sunday: goal, why, steps:*
+
+**Goal.** Reconcile your toy against what the real provider reports, and prove the week's accounting.
+
+**Why.** If your toy and the provider disagree, one of your mental models is wrong — and finding which is the most useful thing you'll learn about caching this week.
+
+1. Run Experiment 7: compare your radix toy's hit rate with the provider's reported cache reads on the same traces, and write down why they differ (breakpoint placement, TTL expiry, block granularity, the 20-block lookback).
+2. Answer the remaining questions in **You should be able to answer**.
+3. Attempt **Checkpoint** below. If you can't explain prompt caching in terms of per-layer key/value tensors cold, redo Monday before starting Week 4.
+
+**This week's objective and target layout**
+
 **Objective.** By Sunday, every request rig sends is assembled by one explicit pipeline you can measure: you know how many tokens each segment costs, which part came from cache and why each miss happened, and rig survives a task too long for its context window (T17 under a 40,000-token limit) by shrinking history without breaking a tool call from its result.
 
 **What changes.** Week 2 gave you a `prepare_request(messages) -> messages` hook that runs before every request. This week that hook becomes the context pipeline, and every new file is one stage of it:
@@ -1294,7 +1720,7 @@ Reference code on this page is pinned so line numbers never drift: [pi](https://
 |---|---|---|---|
 | `rig/context.py` | Estimate tokens per segment before a request; record provider `usage` per segment after | pi's [`estimateTokens`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts#L298) | Tue |
 | `rig/shrink.py` | One `Shrinker` interface; masking and compaction (Tue), clearing and server compaction (Wed) | pi's [`compaction.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts#L859) | Tue, Wed |
-| `rig/cache_policy.py` | Where breakpoints go and which TTL each gets; optional pre-warm | pi's [`getCacheControl`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/anthropic-messages.ts#L84) and [`CacheWarmer`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/cache-warmer.ts#L162) | Tue (breakpoints), Wed (TTL) |
+| `rig/cache_policy.py` | Where breakpoints go and which TTL each gets, applied to the Anthropic request body; optional pre-warm | pi's [`getCacheControl`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/anthropic-messages.ts#L84) and [`CacheWarmer`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/cache-warmer.ts#L162) | Tue (breakpoints), Wed (TTL) |
 | `rig/ledger.py` | Per request: tokens that should have been cached but weren't, their cost, the likely cause | pi's [`cache-stats.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/cache-stats.ts#L56) | Wed |
 | `rig/kvtoy.py` | A radix tree over token ids, to replay old traces and see what a server could have reused | SGLang's [`radix_cache.py`](https://github.com/sgl-project/sglang/blob/b068417bfcc19ba14e6588ce96d31e406077e6aa/python/sglang/srt/mem_cache/radix_cache.py#L364) | Wed |
 | `rig/tools/note.py`, `.rig/notes.md` | A `note` tool the agent uses to write working memory, loaded at session start | — | Wed |
@@ -1317,7 +1743,7 @@ tests/test_context.py, test_shrink.py, test_cache_policy.py, test_kvtoy.py, test
 
 **How it fits together.** Every request goes through the same three stages, in this order, inside Week 2's hook:
 
-```python
+```python file=rig/agent.py
 # agent.py — prepare_request is now the context pipeline
 def prepare_request(messages):
     est = context.estimate(SYSTEM, TOOLS, messages)               # Tue: per segment, before the call
@@ -1325,156 +1751,166 @@ def prepare_request(messages):
         messages = shrinker.shrink(messages)                      # Tue/Wed: one interface, four strategies
         session.append("compaction", summary_entry)               # originals stay in the log
     view = masking.view(messages, keep_turns=K)                   # Tue: masks in batches, not every turn
-    return cache_policy.place(view, ttl=cache_policy.choose_ttl(expected_idle_s))   # Tue/Wed
+    return view                                                   # rig's own types: no cache markers here
+
+# breakpoints are an Anthropic feature, so they go on the Anthropic request body, never on rig's messages
+provider = AnthropicProvider(model, transform=lambda body: cache_policy.place(
+    body, ttl=cache_policy.choose_ttl(expected_idle_s)))          # Tue/Wed
 
 # after every response, in agent.events()
 context.record(segments, resp.usage)                              # Tue: ground truth into the trace
 ledger.record(request, resp.usage, previous_request)              # Wed: expected vs actual cache reads -> $, cause
 
 # reactive trigger, wrapped around runtime.run()
-except ContextOverflow:                                           # provider maps "too long" to a typed error
+except ContextOverflow:                                           # each adapter maps its own "too long" error
     messages = shrinker.shrink(messages); retry once              # never a loop
 ```
 
 **Why this achieves the objective.** Putting every byte decision in one function makes the request's layout deterministic, which is the whole precondition for caching: stable segments first, append-only history after, and every change to early bytes either deliberate (a compaction, a batch of masking) or caught by the ledger. The one invariant to protect all week: **nothing in the session log is ever edited or deleted** — shrinking produces a new view or a new entry, the way pi appends a [`CompactionEntry`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/session-manager.ts#L91) and rebuilds context from it in [`buildSessionContext`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/session-manager.ts#L1497).
 
-## Day by day
-| Day | Time | Do | Working by end of day |
-|---|---|---|---|
-| Mon | 1 to 1.5 h | Concepts and the caching docs; the economics in your own numbers | Half-page note: the KV cache, 5-minute vs 1-hour breakpoints, what invalidates a cache |
-| Tue | 3 to 4 h | Build steps 1 to 4: `context.py`, breakpoints, masking, compaction | Per-segment token accounting in the trace; deliberate breakpoints; observation masking; compaction firing past 70% of the window |
-| Wed | 3 to 4 h | Build steps 5 to 9: `kvtoy.py`, `cache_policy.py`, `ledger.py`, the `Shrinker` interface, memory | A radix-tree toy with a measured hit rate; a TTL policy with pre-warm; a cache-miss ledger; three shrinkers behind one interface; `AGENTS.md` plus the `note` tool |
-| Thu | 1.5 to 2 h | Read pi's compaction and cache accounting, and SGLang's radix cache, against your own code | You can narrate the proactive and reactive compaction paths from memory |
-| Fri | 1 to 1.5 h | Experiments 1, 2 and 4 | Cache-read ratio with caching on and off; the timestamp-churn demo and its fix; free-form vs templated summaries |
-| Sat | 3 to 4 h | **Project increment**: T17 under a 40,000-token limit; Experiments 3, 5 and 6 | T17 passes without overflow; the TTL bet computed in dollars; compaction vs clearing vs server compaction compared |
-| Sun | 2 to 3 h | Experiment 7; answer remaining questions; attempt **Checkpoint** | Your radix toy's hit rate reconciled against the provider's reported cache reads; checkpoint passed or a redo list |
-
-### Monday — the KV cache, before the billing feature.
-**Goal.** Place breakpoints tomorrow from a mental model, not by guessing: know what's being cached, what invalidates it, and when each TTL pays for itself.
-
-**Why.** Prompt caching only makes sense once you've seen what it exposes — per-layer attention keys and values computed once and reused for an identical prefix. Every rule this week (stable bytes first, append-only history, no timestamps up top) falls out of that one fact.
-
-1. Read **Concepts** above, twice through the caching bullets.
-2. Read [Prompt caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching) end to end, then skim [Context editing](https://platform.claude.com/docs/en/build-with-claude/context-editing) and [Compaction](https://platform.claude.com/docs/en/build-with-claude/compaction) — you'll compare against both on Saturday.
-3. Open one Week 2 trace and add up, per request, the input tokens that a cache *could* have served (everything before the newest message). That's the size of this week's prize.
-4. Write the half-page note: the 5-minute vs 1-hour economics with your provider's current prices, and the prefix order (tools → system → messages) that decides what one changed byte invalidates.
-
-**Done when:** you can say, for a 30,000-token prefix reused every 3 minutes for an hour, which TTL is cheaper and by roughly how much.
-
-### Tuesday — the context pipeline every request runs through.
-**Goal.** Every request is measured per segment, carries deliberate breakpoints, masks stale tool output, and compacts itself past 70% of the window.
-
-**Why.** These four steps are the path every request takes, in order: measure what you're sending, decide what's cacheable, then shrink history before it overflows anything. Getting them right first gives Wednesday's measurement tools real data.
-
-1. **`rig/context.py`** — `estimate(system, tools, messages) -> Segments` (tokens for tools, system, memory, history, latest turn; `chars / 4` is fine for planning) and `record(segments, usage)`, which writes the provider's `input_tokens`, `cache_read_input_tokens` and `cache_creation_input_tokens` into the trace next to the estimate. Add `peak_input_tokens` and `cache_read_ratio` to `evals/report.py`. pi's estimator is [`estimateTokens`, L298](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts#L298).
-2. **Breakpoints, in `cache_policy.py`** — `place(messages)` puts `cache_control` on the last tool definition, on the system prompt, and on the last block of the newest message: three of your four allowed breakpoints. pi does exactly this: tools at [L1677](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/anthropic-messages.ts#L1677), history at [L1547–1568](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/anthropic-messages.ts#L1547-L1568). Then remove every source of churn: serialize tool schemas with `json.dumps(..., sort_keys=True)`, register tools in a fixed order, and keep the date or cwd out of the system prompt (append it to the newest user message instead).
-3. **Masking, in `shrink.py`** — `Masking.view(messages, keep_turns=K)` returns a copy where every tool result older than K turns becomes `[elided: 4,812 chars from read_file src/click/core.py; call again if needed]`. Opinion: mask in batches — only when the oldest unmasked result is 2K turns old, mask everything older than K in one go — because every masking pass changes early bytes and costs one cache miss; batching turns a miss per turn into a miss every K turns.
-4. **Compaction, in `shrink.py`** — `Compaction.shrink(messages)`: find the latest safe cut point (a turn boundary that doesn't split a `tool_use` from its `tool_result`), summarize everything before it with the cheap model and a fixed template (task, decisions, files touched with what changed, current state, next step), keep the turns after it verbatim, and return `[summary_message, *kept]`. Store a `compaction` entry in `session.py` holding the summary and the id of the first kept entry; `branch()` then replays summary + kept, and the originals stay in the file. pi's versions: [`isCutPointMessage`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts#L351-L393), [`findValidCutPoints`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts#L394), [`findCutPoint`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts#L446), [`prepareCompaction`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts#L859), [`compact`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts#L952).
-5. **Wire both triggers in `agent.py`** — proactive inside `prepare_request` (past 0.7 of the window, pi's [`shouldCompact`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts#L267)), reactive around `runtime.run()`: the provider raises a typed `ContextOverflow` for "prompt is too long", the agent compacts and retries exactly once.
-
-The cut-point search, which is where most compaction bugs live:
-
-```python
-def latest_safe_cut(messages, keep_tail_tokens):
-    budget, i = keep_tail_tokens, len(messages)
-    while i > 0 and budget > 0:                         # walk back until the tail is big enough
-        i -= 1; budget -= est(messages[i])
-    for j in range(i, 0, -1):                           # then back to a boundary that's safe to cut
-        if messages[j]["role"] == "user" and not is_tool_result(messages[j]):
-            return j                                    # a real user turn: no open tool call before it
-    return None                                         # nothing safe: mask instead, don't compact
-```
-
-Tests: `test_context.py` — estimates within 20% of a recorded `usage` on a saved request. `test_cache_policy.py` — the same messages serialize to identical bytes twice; there are never more than four breakpoints. `test_shrink.py` — no compaction ever leaves a `tool_use` without its `tool_result`; masking never touches the last K turns; compacting twice at the same cut point produces one entry (key it by the cut-point entry id).
-
-**Done when:** a long Week 2 task run shows per-segment usage in its trace, a nonzero `cache_read_input_tokens` from the second request on, and — with the window artificially set to 20,000 — one compaction entry and a run that still finishes.
-
-### Wednesday — measuring what Tuesday's pipeline actually does.
-**Goal.** Proof, not plumbing: a radix toy that shows what a server could reuse, a TTL policy, a ledger that prices every miss, one interface over four ways to shrink history, and the first piece of memory.
-
-**Why.** Tuesday's pipeline is a set of bets. Today you build the instruments that tell you whether the bets paid — and the toy makes the data structure behind a real server stop being a black box.
-
-1. **`rig/kvtoy.py`** — `RadixTree` with `match_prefix(ids) -> (n_matched, node)`, `insert(ids)` (splitting a node when a new key diverges partway along an edge), per-node `ref_count`, and `evict(n)` that frees least-recently-used *leaves* with `ref_count == 0` only. Tokenize with any tokenizer (`pip install tiktoken`; `o200k_base` is fine — the hit rate depends on prefix structure, not the exact ids). Replay every request from your Week 1 and 2 traces in order and report `matched / total` tokens. SGLang's real one: [`match_prefix`](https://github.com/sgl-project/sglang/blob/b068417bfcc19ba14e6588ce96d31e406077e6aa/python/sglang/srt/mem_cache/radix_cache.py#L364), [`insert`](https://github.com/sgl-project/sglang/blob/b068417bfcc19ba14e6588ce96d31e406077e6aa/python/sglang/srt/mem_cache/radix_cache.py#L428), [`evict`](https://github.com/sgl-project/sglang/blob/b068417bfcc19ba14e6588ce96d31e406077e6aa/python/sglang/srt/mem_cache/radix_cache.py#L552), [`_split_node`](https://github.com/sgl-project/sglang/blob/b068417bfcc19ba14e6588ce96d31e406077e6aa/python/sglang/srt/mem_cache/radix_cache.py#L677).
-2. **`cache_policy.py`, TTLs** — a 1-hour breakpoint after tools and system, a 5-minute one on the newest message (1-hour entries must come before 5-minute ones); `choose_ttl(expected_idle_s)` picks 1 hour only when the expected gap exceeds 5 minutes and the prefix will be reused at least twice. Record `cache_creation.ephemeral_5m_input_tokens` and `ephemeral_1h_input_tokens` per request. Add `prewarm()`: before a known idle gap (waiting on a long tool, a human), send a minimal request that rewrites the entry — and only when the ledger says it's cheaper than a miss, which is pi's [`CacheWarmer.evaluate`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/cache-warmer.ts#L378) decision.
-3. **`rig/ledger.py`** — per request, compare the previous request's cacheable prefix with this request's `cache_read_input_tokens`; the shortfall is a miss. Price it (shortfall × (write price − read price)) and assign a cause: idle past the TTL, model switch, edited prefix (find the first differing segment), or a breakpoint moved. pi's [`detectMiss`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/cache-stats.ts#L56-L147) and [`computeCacheWaste`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/cache-stats.ts#L148). Every later week reads this file's output.
-4. **The `Shrinker` interface, in `shrink.py`** — `shrink(messages) -> (messages, entry)`, implemented by `Compaction` (Tuesday), `ToolResultClearing` (yours: replace tool results older than `keep` uses until at least `clear_at_least` tokens are freed), `ProviderClearing` (sends `clear_tool_uses_20250919` per [Context editing](https://platform.claude.com/docs/en/build-with-claude/context-editing) and returns messages unchanged), and `ServerCompaction` (per [Compaction](https://platform.claude.com/docs/en/build-with-claude/compaction)). The agent picks one by name from config, so Saturday's Experiment 6 is a flag.
-5. **Memory** — write `workspaces/click/AGENTS.md` yourself (layout, test command, conventions — the things the agent re-discovers every run), and add `tools/note.py`: `note(text)` appends to `.rig/notes.md`, refusing once the file would pass 2 KB; `agent.py` loads it into the system prompt at session start, after `AGENTS.md`.
-
-Tests: `test_kvtoy.py` — property tests (`hypothesis`, or 1,000 random token lists): `match_prefix` always returns the longest stored prefix; `evict` never frees a node with `ref_count > 0`; inserting then matching the same list matches all of it. `test_ledger.py` — two identical requests five seconds apart show no miss; a changed tool schema shows a miss caused by an edited prefix. `test_shrink.py` — every `Shrinker` returns messages that pass the Week 2 orphan check.
-
-**Done when:** `kvtoy` prints a hit rate for your Week 2 traces, and a Week 2 task run produces a ledger with zero unexplained misses.
-
-### Thursday — read pi's compactor and SGLang's radix cache.
-**Goal.** Narrate pi's proactive and reactive compaction paths from memory, and answer questions 1, 2, 5 and 6 from the reading alone.
-
-**Why.** pi's compactor handles every edge case you just built against (cut points, idempotency, cache-warming economics) in a file small enough to read in one sitting, and SGLang's radix cache is what your toy was a toy of. Reading both the day after building yours gives you a diff, not a tutorial.
-
-1. Read pi's [`compaction.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts) side by side with your `shrink.py`: settings ([L126](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts#L126)), cut points ([L351–445](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts#L351-L445)), [`generateSummary`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts#L644) — compare its prompt with yours and with Codex's 9-line [compaction prompt](https://github.com/openai/codex/blob/aa854dabf54e1dd6c2bda80653944b4f2c0672d7/codex-rs/prompts/templates/compact/prompt.md).
-2. Read pi's [`cache-warmer.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/cache-warmer.ts) (`getCacheWarmingDelayMs` L29, `getPromptCacheTtlMs` L39, `evaluate` L378) against your `cache_policy.py`, and [`cache-stats.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/cache-stats.ts) (174 lines) against your `ledger.py`.
-3. Read SGLang's `radix_cache.py` against your `kvtoy.py`: [`match_prefix`](https://github.com/sgl-project/sglang/blob/b068417bfcc19ba14e6588ce96d31e406077e6aa/python/sglang/srt/mem_cache/radix_cache.py#L364), [`insert`](https://github.com/sgl-project/sglang/blob/b068417bfcc19ba14e6588ce96d31e406077e6aa/python/sglang/srt/mem_cache/radix_cache.py#L428), [`evict`](https://github.com/sgl-project/sglang/blob/b068417bfcc19ba14e6588ce96d31e406077e6aa/python/sglang/srt/mem_cache/radix_cache.py#L552), [`_match_prefix_helper`](https://github.com/sgl-project/sglang/blob/b068417bfcc19ba14e6588ce96d31e406077e6aa/python/sglang/srt/mem_cache/radix_cache.py#L651), [`_split_node`](https://github.com/sgl-project/sglang/blob/b068417bfcc19ba14e6588ce96d31e406077e6aa/python/sglang/srt/mem_cache/radix_cache.py#L677). Then skim vLLM's hash-chained alternative: [`hash_block_tokens`](https://github.com/vllm-project/vllm/blob/bfa2a433453675b0c7abcb5df163fd5e59ffe2a3/vllm/v1/core/kv_cache_utils.py#L707) and [`get_computed_blocks`](https://github.com/vllm-project/vllm/blob/bfa2a433453675b0c7abcb5df163fd5e59ffe2a3/vllm/v1/core/kv_cache_manager.py#L266).
-4. Trace both paths in **Read** below: the proactive compaction path and the reactive overflow path.
-5. Answer questions 1, 2, 5 and 6 in **You should be able to answer** from the reading alone.
-
-**Done when:** you can draw pi's proactive path from turn end to the next request, naming each function.
-
-### Friday — cheap experiments only.
-**Goal.** See the shape of caching in your own numbers before the weekend puts dollar figures on it.
-
-**Why.** Three quick runs make the rules from Monday visible: caching on vs off, one timestamp destroying a cache, and how much a summary's template matters.
-
-Run Experiments 1, 2 and 4 below. For Experiment 1, make caching a flag in `cache_policy.py` (`place()` returns messages untouched when off) and run the eval set both ways. For Experiment 2, put `datetime.now()` at the top of the system prompt, watch `cache_read_input_tokens` drop to zero in the ledger with cause "edited prefix", then move it to the newest user message and watch reads recover. For Experiment 4, swap `Compaction`'s template for "Summarize the conversation so far" on T17 and compare. Write results to `notes/week3-experiments.md`.
-
-**Done when:** the note has the cache-read ratio and dollars per task both ways, and the ledger screenshot (or excerpt) of the timestamp miss.
-
-### Saturday — T17, and the expensive experiments.
-**Goal.** T17 — all four Week 1 bugs in one session under a 40,000-token limit — passes because compaction fires for real.
-
-**Why.** T17 is the task this whole week was for. Stack the experiments that need many paid runs onto the same day you're paying for runs anyway.
-
-1. Add T17 to `evals/tasks/week1.yaml` per **Project increment** below: its seed is the T04, T05, T07 and T09 patches concatenated (apply them in that order to one snapshot; they touch different files), its grader is the union of their selectors plus the full suite. Add a per-task `context_limit: 40000` that `run_evals.py` passes into the agent. Confirm it overflows with history management off.
-2. Run Experiment 3: masking only, compaction only, both — and count re-reads (a `read_file` of a path already read before the last compaction). That's your forgetting metric.
-3. Run Experiment 5, the TTL bet: replay one long session at 2, 8 and 40-minute idle gaps under both TTLs, with and without pre-warming; compute dollars per session from the per-TTL usage fields.
-4. Run Experiment 6 by switching the `Shrinker` flag: your compaction vs your clearing vs provider clearing at `clear_at_least` 0 and 5,000 vs server compaction — pass rate, misses caused (from the ledger), dollars.
-
-**Done when:** T17 passes without an overflow error, and the report shows compaction's cost as its own line.
-
-### Sunday — the last experiment, then the checkpoint.
-**Goal.** Reconcile your toy against what the real provider reports, and prove the week's accounting.
-
-**Why.** If your toy and the provider disagree, one of your mental models is wrong — and finding which is the most useful thing you'll learn about caching this week.
-
-1. Run Experiment 7: compare your radix toy's hit rate with the provider's reported cache reads on the same traces, and write down why they differ (breakpoint placement, TTL expiry, block granularity, the 20-block lookback).
-2. Answer the remaining questions in **You should be able to answer**.
-3. Attempt **Checkpoint** below. If you can't explain prompt caching in terms of per-layer key/value tensors cold, redo Monday before starting Week 4.
-
-## Build
-1. [ ] `rig/context.py`: before each request, compute an estimate per segment; after it, record `usage` per segment in the trace. Add `peak_input_tokens` and `cache_read_ratio` to the eval report.
-2. [ ] Caching: place breakpoints after the tool definitions and system prompt, and on the newest message. Make history strictly append-only and serialization deterministic.
-3. [ ] Observation masking: replace tool outputs older than K turns with `[elided: 4,812 chars from read_file src/click/core.py; call again if needed]`.
-4. [ ] Compaction: past 70% of the window (or on a context-overflow error, followed by one retry), summarize everything before the latest safe cut point with the cheap model and a fixed template (task, decisions, files touched with what changed, current state, next step), and keep the last few turns verbatim. Store it as a `compaction` entry in the session log; never delete the originals.
-5. [ ] `rig/kvtoy.py`: a radix tree over token-id lists with `match_prefix`, `insert` (splitting nodes on partial matches), reference counts, and LRU `evict`. Replay the requests from your Week 1 and 2 traces through it (any tokenizer will do) and compute the hit rate a server would have seen.
-6. [ ] `rig/cache_policy.py`: place breakpoints deliberately (a 1-hour breakpoint after the tools and system prompt, a 5-minute one on the newest message; 1-hour entries must come before 5-minute ones), choose the TTL from the expected idle time, and record the per-TTL write counts (`cache_creation.ephemeral_5m_input_tokens` and `ephemeral_1h_input_tokens`). Add an optional pre-warm before a known idle gap.
-7. [ ] A cost ledger with a cache-miss detector, after pi's `cache-stats.ts`: for each request, the tokens that should have come from cache but didn't, what that cost, and the likely cause (idle past the TTL, a model switch, an edited prefix). Every later week reads this ledger.
-8. [ ] Three history shrinkers behind one interface: your compaction, tool-result clearing (yours first, then the provider's), and the provider's server-side compaction.
-9. [ ] Memory: an `AGENTS.md` for click written by you, plus a `note` tool that appends to `.rig/notes.md` (capped at 2 KB) and is loaded at session start.
-
 ## Project increment
-rig v0.3 handles long tasks. Add T17: apply the T04, T05, T07 and T09 seeds at once and ask for all four symptoms to be fixed in one session. Run it with an artificial context limit of 40,000 tokens so compaction must fire. rig v0.3 also places cache breakpoints deliberately and reports the dollars lost to cache misses.
+rig v0.3 handles long tasks.
+
+- Add T17: Apply the T04, T05, T07 and T09 seeds at once and ask for all four symptoms to be fixed in one session.
+- Limit: Run it with an artificial context limit of 40,000 tokens so compaction must fire.
+- Also: rig v0.3 places cache breakpoints deliberately and reports the dollars lost to cache misses.
 
 ## Read
 The day sections above link straight to the lines each day needs; this is the consolidated map.
 
-**pi's compaction (main).** A production compactor small enough to read in one sitting, handling exactly the edge cases above. In [`compaction/compaction.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts): `DEFAULT_COMPACTION_SETTINGS` (L126), `shouldCompact` (L267), `estimateTokens` (L298), `isCutPointMessage` (L351), `findValidCutPoints` (L394), `findCutPoint` (L446), `generateSummary` (L644), `prepareCompaction` (L859), `compact` (L952). Then, in [`agent-session.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/agent-session.ts#L767-L785), `_exceedsCompactionThreshold` (L767) and `_compactBeforeNextAssistantResponse` (L776), installed as the `prepareNextTurn` hook at [L898–905](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/agent-session.ts#L898-L905), and [`_runAutoCompaction`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/agent-session.ts#L3157) (L3157, which takes `"overflow" | "threshold"`). Finish with [`cache-warmer.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/cache-warmer.ts) (`getPromptCacheTtlMs` L39, `getCacheWarmingDelayMs` L29), which reasons about whether paying to keep a cache warm is cheaper than letting it expire.
+Reference code on this page is pinned so line numbers never drift. Clone each into `reading/` and `git checkout` that commit; record them in `reading/SHAS.txt`.
 
-**pi's cache accounting.** [`cache-stats.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/cache-stats.ts) (174 lines): `detectMiss` (L56) prices each miss from the message's own cost breakdown, and `computeCacheWaste` (L148) totals the misses for a session. In `cache-warmer.ts`, `CacheWarmer` (L162) and its `evaluate` method (L378) decide whether keeping a cache warm is worth paying for. In [`anthropic-messages.ts`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/anthropic-messages.ts#L84), `getCacheControl` (L84) maps a short or long retention setting to a 5-minute or 1-hour breakpoint, the code at L1547–1568 puts the history breakpoint on the last message, and L1677 puts one on the last tool.
+| Repository | Commit |
+|---|---|
+| [pi](https://github.com/earendil-works/pi) | `136b87e` (as in Week 2) |
+| [SGLang](https://github.com/sgl-project/sglang) | `b068417` |
+| [vLLM](https://github.com/vllm-project/vllm) | `bfa2a43` |
+| [Codex](https://github.com/openai/codex) | `aa854da` |
 
-**[sgl-project/sglang](https://github.com/sgl-project/sglang), one file:** [`python/sglang/srt/mem_cache/radix_cache.py`](https://github.com/sgl-project/sglang/blob/b068417bfcc19ba14e6588ce96d31e406077e6aa/python/sglang/srt/mem_cache/radix_cache.py) (832 lines). Read `match_prefix` (L364), `insert` (L428), `evict` (L552), `_match_prefix_helper` (L651) and `_split_node` (L677). This is the data structure behind prefix reuse; once you have read it, "prompt caching" stops being a product feature and becomes a tree lookup. For the alternative design, skim vLLM's [`hash_block_tokens`](https://github.com/vllm-project/vllm/blob/bfa2a433453675b0c7abcb5df163fd5e59ffe2a3/vllm/v1/core/kv_cache_utils.py#L707) in `vllm/v1/core/kv_cache_utils.py` and [`KVCacheManager.get_computed_blocks`](https://github.com/vllm-project/vllm/blob/bfa2a433453675b0c7abcb5df163fd5e59ffe2a3/vllm/v1/core/kv_cache_manager.py#L266) in `kv_cache_manager.py`.
+**pi's compaction (main) (`136b87e`)**
 
-**[openai/codex](https://github.com/openai/codex), prompts and memory only:** [`codex-rs/prompts/templates/compact/prompt.md`](https://github.com/openai/codex/blob/aa854dabf54e1dd6c2bda80653944b4f2c0672d7/codex-rs/prompts/templates/compact/prompt.md) (a 9-line compaction prompt to compare with pi's), then [`codex-rs/memories/README.md`](https://github.com/openai/codex/blob/aa854dabf54e1dd6c2bda80653944b4f2c0672d7/codex-rs/memories/README.md) and [`write/templates/memories/stage_one_system.md`](https://github.com/openai/codex/blob/aa854dabf54e1dd6c2bda80653944b4f2c0672d7/codex-rs/memories/write/templates/memories/stage_one_system.md). Codex's long-term memory is a background pipeline: per-session extraction (phase 1), then consolidation into memory files (phase 2), with job leases so concurrent workers do not duplicate work, and secret redaction before anything is stored. Then compare [`codex-rs/core/src/compact.rs`](https://github.com/openai/codex/blob/aa854dabf54e1dd6c2bda80653944b4f2c0672d7/codex-rs/core/src/compact.rs), which summarizes locally, with [`compact_remote_v2.rs`](https://github.com/openai/codex/blob/aa854dabf54e1dd6c2bda80653944b4f2c0672d7/codex-rs/core/src/compact_remote_v2.rs), which asks the server to compact.
+A production compactor small enough to read in one sitting, handling exactly the edge cases above.
 
-**Trace this path in pi:** a turn finishes → the `prepareNextTurn` hook (installed at `agent-session.ts` L898) calls `_compactBeforeNextAssistantResponse` → `_exceedsCompactionThreshold` → `_runAutoCompaction("threshold", ...)` → `prepareCompaction` → `findCutPoint` → `generateSummary` (a model call) → a `CompactionEntry` is appended → `buildSessionContext` rebuilds the context as summary plus kept entries → the next request. Then trace the reactive path: an overflow error → `_runAutoCompaction("overflow", willRetry)` → retry.
+1. [compaction/compaction.ts](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/compaction/compaction.ts)
+2. [agent-session.ts](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/agent-session.ts#L767-L785), then the hook at [L898–905](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/agent-session.ts#L898-L905) and [the auto-compaction runner](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/agent-session.ts#L3157)
+3. [cache-warmer.ts](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/cache-warmer.ts)
+
+*Functions in reading order, with line numbers:*
+
+```text
+compaction.ts      L126   DEFAULT_COMPACTION_SETTINGS
+                   L267   shouldCompact
+                   L298   estimateTokens
+                   L351   isCutPointMessage
+                   L394   findValidCutPoints
+                   L446   findCutPoint
+                   L644   generateSummary
+                   L859   prepareCompaction
+                   L952   compact
+agent-session.ts   L767   _exceedsCompactionThreshold
+                   L776   _compactBeforeNextAssistantResponse   (the prepareNextTurn hook, installed at L898–905)
+                   L3157  _runAutoCompaction                    (takes "overflow" | "threshold")
+cache-warmer.ts    L39    getPromptCacheTtlMs
+                   L29    getCacheWarmingDelayMs
+```
+
+*What cache-warmer.ts decides:*
+
+It reasons about whether paying to keep a cache warm is cheaper than letting it expire.
+
+**pi's cache accounting (`136b87e`)**
+
+`detectMiss` prices each miss from the message's own cost breakdown, and `computeCacheWaste` totals the misses for a session.
+
+1. [cache-stats.ts](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/cache-stats.ts) (174 lines)
+2. cache-warmer.ts, for the decision whether keeping a cache warm is worth paying for
+3. [anthropic-messages.ts](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/anthropic-messages.ts#L84), for where the breakpoints go
+
+*Functions in reading order, with line numbers:*
+
+```text
+cache-stats.ts          L56    detectMiss
+                        L148   computeCacheWaste
+cache-warmer.ts         L162   CacheWarmer
+                        L378   evaluate
+anthropic-messages.ts   L84    getCacheControl   (short or long retention -> a 5-minute or 1-hour breakpoint)
+                        L1547–1568             the history breakpoint, on the last message
+                        L1677                  one on the last tool
+```
+
+**sgl-project/sglang, one file (`b068417`)**
+
+This is the data structure behind prefix reuse; once you have read it, "prompt caching" stops being a product feature and becomes a tree lookup.
+
+1. [python/sglang/srt/mem_cache/radix_cache.py](https://github.com/sgl-project/sglang/blob/b068417bfcc19ba14e6588ce96d31e406077e6aa/python/sglang/srt/mem_cache/radix_cache.py) (832 lines)
+2. For the alternative design, skim vLLM's [hash_block_tokens](https://github.com/vllm-project/vllm/blob/bfa2a433453675b0c7abcb5df163fd5e59ffe2a3/vllm/v1/core/kv_cache_utils.py#L707) in vllm/v1/core/kv_cache_utils.py and [KVCacheManager.get_computed_blocks](https://github.com/vllm-project/vllm/blob/bfa2a433453675b0c7abcb5df163fd5e59ffe2a3/vllm/v1/core/kv_cache_manager.py#L266) in kv_cache_manager.py
+
+*Functions in reading order, with line numbers:*
+
+```text
+radix_cache.py   L364   match_prefix
+                 L428   insert
+                 L552   evict
+                 L651   _match_prefix_helper
+                 L677   _split_node
+```
+
+**openai/codex, prompts and memory only (`aa854da`)**
+
+Codex's long-term memory is a background pipeline: per-session extraction (phase 1), then consolidation into memory files (phase 2).
+
+1. [codex-rs/prompts/templates/compact/prompt.md](https://github.com/openai/codex/blob/aa854dabf54e1dd6c2bda80653944b4f2c0672d7/codex-rs/prompts/templates/compact/prompt.md): a 9-line compaction prompt to compare with pi's
+2. [codex-rs/memories/README.md](https://github.com/openai/codex/blob/aa854dabf54e1dd6c2bda80653944b4f2c0672d7/codex-rs/memories/README.md)
+3. [write/templates/memories/stage_one_system.md](https://github.com/openai/codex/blob/aa854dabf54e1dd6c2bda80653944b4f2c0672d7/codex-rs/memories/write/templates/memories/stage_one_system.md)
+4. [codex-rs/core/src/compact.rs](https://github.com/openai/codex/blob/aa854dabf54e1dd6c2bda80653944b4f2c0672d7/codex-rs/core/src/compact.rs), which summarizes locally, against [compact_remote_v2.rs](https://github.com/openai/codex/blob/aa854dabf54e1dd6c2bda80653944b4f2c0672d7/codex-rs/core/src/compact_remote_v2.rs), which asks the server to compact
+
+*How the memory pipeline stays safe:*
+
+It uses job leases so concurrent workers do not duplicate work, and secret redaction before anything is stored.
+
+Two paths, from a finished turn to the next request.
+
+*Both paths, function by function:*
+
+```text
+proactive:  a turn finishes
+            -> prepareNextTurn hook (installed at agent-session.ts L898)
+            -> _compactBeforeNextAssistantResponse
+            -> _exceedsCompactionThreshold
+            -> _runAutoCompaction("threshold", ...)
+            -> prepareCompaction -> findCutPoint -> generateSummary (a model call)
+            -> a CompactionEntry is appended
+            -> buildSessionContext rebuilds the context as summary plus kept entries
+            -> the next request
+
+reactive:   an overflow error -> _runAutoCompaction("overflow", willRetry) -> retry
+```
+
+## Experiments
+Three quick runs make the rules from Monday visible; the weekend puts dollar figures on the rest.
+
+- [ ] **Caching on versus off across the eval set**
+    - Measure: Cache-read ratio, dollars per task, latency
+- [ ] **Add a timestamp at the top of the system prompt**
+    - Change: Then move it to the end of the latest message
+    - Expect: Cache reads collapse, then recover
+- [ ] **Run T17 under the 40,000-token limit four ways**
+    - Change: No management (expect overflow), masking only, compaction only, both
+    - Measure: How often the agent re-reads a file it already read before compaction; that is your forgetting metric
+- [ ] **Free-form versus templated summaries on T17**
+- [ ] **The TTL bet: replay one long session with idle gaps**
+    - Change: Idle gaps of 2, 8 and 40 minutes; 5-minute and 1-hour TTLs; with and without pre-warming
+    - Measure: Dollars per session, from the per-TTL usage fields
+- [ ] **Run T17 with your compaction, clearing, and server-side compaction**
+    - Change: Your compaction; tool-result clearing (`clear_at_least` at 0 and at 5,000 tokens); the provider's server-side compaction
+    - Measure: Pass rate, cache misses caused, dollars
+- [ ] **Compare your radix toy's hit rate with the provider's cache reads**
+    - Measure: Your toy's hit rate and the provider's reported cache reads, on the same traces
+    - Then: Explain the gap
 
 ## You should be able to answer
+Questions 1, 2, 5 and 6 come from Thursday's reading; the rest from your own runs.
+
 1. [ ] What makes a valid cut point in pi, and what exactly breaks if you cut between a tool call and its result?
 2. [ ] Why keep a verbatim tail instead of summarizing everything?
 3. [ ] How does pi estimate tokens before a request, and when does it switch to the provider's reported usage?
@@ -1484,16 +1920,9 @@ The day sections above link straight to the lines each day needs; this is the co
 7. [ ] List four ways your request can miss the cache although "nothing changed".
 8. [ ] Why does Codex split memory into extraction and consolidation phases, and why does it need leases at all?
 
-## Experiments
-1. [ ] Caching on versus off across the eval set: cache-read ratio, dollars per task, latency.
-2. [ ] Add a timestamp at the top of the system prompt and watch cache reads collapse. Move it to the end of the latest message and watch them recover.
-3. [ ] T17 under the 40,000-token limit: no management (expect overflow), masking only, compaction only, both. Count how often the agent re-reads a file it already read before compaction; that is your forgetting metric.
-4. [ ] Free-form versus templated summaries on T17.
-5. [ ] **The TTL bet.** Replay one long session with idle gaps of 2, 8 and 40 minutes under 5-minute and 1-hour TTLs, with and without pre-warming. Compute dollars per session from the per-TTL usage fields.
-6. [ ] T17 with your compaction, with tool-result clearing (`clear_at_least` at 0 and at 5,000 tokens), and with the provider's server-side compaction: pass rate, cache misses caused, dollars.
-7. [ ] Compare your radix toy's hit rate with the provider's reported cache reads on the same traces. Explain the gap.
-
 ## Production lens
+What changes once this runs for real users: six notes, open one for the detail.
+
 - **Context overflow is a typed, recoverable error** with exactly one retry after compaction, never a loop.
 - **Compaction is a step that can fail.** If the summary call errors, fall back to masking; never leave the session half-compacted.
 - **Idempotency:** a retried turn must not compact twice. Key compaction entries by the cut-point entry id.
@@ -1502,14 +1931,24 @@ The day sections above link straight to the lines each day needs; this is the co
 - **Memory files are an exfiltration surface.** Anything the agent writes to long-term memory is later loaded into other sessions; redact secrets before writing.
 
 ## Not yet
-Vector-store memory products, knowledge-graph memory, "infinite context" claims, building your own serving engine, and fine-tuning for memory. Each is easier to judge once you can measure what a simple file and a summary already give you.
+Each is easier to judge once you can measure what a simple file and a summary already give you.
+
+Vector-store memory products, knowledge-graph memory, "infinite context" claims, building your own serving engine, and fine-tuning for memory.
 
 ## Checkpoint
-- [ ] From any trace you can say which part of each request was served from cache and why each miss happened.
-- [ ] rig completes T17 under the 40,000-token limit without an overflow error, and the report shows what compaction cost and what it did to pass rate.
-- [ ] Your radix toy passes property tests: matching returns the longest stored prefix, and eviction never frees a referenced node.
-- [ ] Your ledger attributes every cache miss in a session to a cause, and you can say when a 1-hour TTL beats a 5-minute one for your traffic.
-- [ ] You can explain prompt caching to a colleague in terms of per-layer key and value tensors.
+If you can't explain prompt caching in terms of per-layer key/value tensors cold, redo Monday before starting Week 4.
+
+- [ ] **Say which part of each request came from cache, and why**
+    From any trace you can say which part of each request was served from cache and why each miss happened.
+- [ ] **rig completes T17 under the 40,000-token limit without overflow**
+    - Report shows: What compaction cost and what it did to pass rate
+- [ ] **Your radix toy passes property tests**
+    - Matching: Returns the longest stored prefix
+    - Eviction: Never frees a referenced node
+- [ ] **Your ledger attributes every cache miss in a session to a cause**
+    - And: You can say when a 1-hour TTL beats a 5-minute one for your traffic
+- [ ] **Explain prompt caching in terms of per-layer key and value tensors**
+    You can explain prompt caching to a colleague in terms of per-layer key and value tensors.
 
 ---
 
@@ -2053,14 +2492,14 @@ Reference code on this page is pinned so line numbers never drift: [nanochat](ht
 | `rig/lm/block.py` | One transformer block's forward pass with plain tensor ops | [`Block`](https://github.com/karpathy/nanochat/blob/92d63d4e8bb4df75c3b71618f31ddde2378b2bcd/nanochat/gpt.py#L144-L156), [`CausalSelfAttention.forward`](https://github.com/karpathy/nanochat/blob/92d63d4e8bb4df75c3b71618f31ddde2378b2bcd/nanochat/gpt.py#L84) | Wed |
 | `rig/lm/toolgen.py` | A copy of `Engine.generate` that calls rig's `search` | [`Engine.generate`](https://github.com/karpathy/nanochat/blob/92d63d4e8bb4df75c3b71618f31ddde2378b2bcd/nanochat/engine.py#L176) | Thu |
 | `rig/kvdemo.py` | Decode with and without a KV cache; plot tokens per second against context length | [`KVCache`](https://github.com/karpathy/nanochat/blob/92d63d4e8bb4df75c3b71618f31ddde2378b2bcd/nanochat/engine.py#L82) | Fri |
-| `providers/anthropic.py` (extend) | Record time to first token and time per output token on every call | — | Sat |
+| `providers/anthropic.py`, `providers/openai_chat.py` (extend) | Record time to first token and time per output token on every call | — | Sat |
 
 ```text
 rig/
   lm/                    # learning code: never imported by the agent
     bpe.py  block.py  toolgen.py
   kvdemo.py
-  providers/anthropic.py # + ttft_s, tpot_s on TurnEnd
+  providers/*.py         # + ttft_s, tpot_s on TurnEnd, in every adapter
 reading/nanochat/        # pinned, trained on your machine
 notes/week6-experiments.md, notes/week6-kv-arithmetic.md
 tests/test_bpe.py, test_block.py
@@ -2083,7 +2522,7 @@ while True:
     out.append(tok)
     logits = model.forward([tok], cache)         # decode: one token, reads the whole cache -> bandwidth-bound -> TPOT
 
-# rig v0.6 measures the same two phases from outside the API (providers/anthropic.py)
+# rig v0.6 measures the same two phases from outside the API (each adapter in providers/)
 t0 = monotonic(); first = None
 for ev in sdk_stream:
     if first is None and is_first_text_or_tool_delta(ev): first = monotonic()
@@ -2180,7 +2619,7 @@ Test: `test_block.py` — `torch.allclose(yours, theirs, atol=1e-5)` on three ra
 **Why.** Week 8's routing and Week 10's latency budgets both depend on rig knowing how long prefill and decode each took.
 
 1. Run Experiments 1–4 below; results to `notes/week6-experiments.md`. For Experiment 4, call [`estimate_prefill_flops`](https://github.com/karpathy/nanochat/blob/92d63d4e8bb4df75c3b71618f31ddde2378b2bcd/nanochat/gpt.py#L362) and [`estimate_decode_flops`](https://github.com/karpathy/nanochat/blob/92d63d4e8bb4df75c3b71618f31ddde2378b2bcd/nanochat/gpt.py#L351) with one rig step's real token counts.
-2. Ship rig v0.6 per **Project increment** below: in `providers/anthropic.py`, record `t0` before opening the stream, the time of the first text or tool-input delta, and the end time; put `ttft_s` and `tpot_s` on `TurnEnd` and into the `chat` span (Week 5) as attributes. Add median TTFT and TPOT per task to `report.py`.
+2. Ship rig v0.6 per **Project increment** below: in each provider adapter, record `t0` before opening the stream, the time of the first text or tool-input delta, and the end time; put `ttft_s` and `tpot_s` on `TurnEnd` and into the `chat` span (Week 5) as attributes. Add median TTFT and TPOT per task to `report.py`.
 
 **Done when:** a fresh run's trace has `ttft_s` and `tpot_s` on every model call, and the report shows them.
 
@@ -2491,7 +2930,7 @@ Reference code on this page is pinned so line numbers never drift: [pi](https://
 
 ## Concepts
 - **Cost per success, not cost per token.** A cheap model that fails twice and then succeeds costs more than an expensive one that succeeds once. Every routing decision is judged on your eval set by pass^3 and dollars per solved task, plotted together.
-- **Reasoning effort is a request parameter.** On the Anthropic API, `output_config.effort` takes `low`, `medium`, `high`, `xhigh` or `max`; the default and supported values depend on the model (see [Effort](https://platform.claude.com/docs/en/build-with-claude/effort)). On models with adaptive thinking, effort is the main control for how often and how deeply the model thinks; older extended-thinking models use a `budget_tokens` cap instead. On the OpenAI API, `reasoning.effort` ranges from `none` to `max` (model-dependent, default `medium`), and reasoning tokens are billed as output and reported in `output_tokens_details.reasoning_tokens` (see the [reasoning guide](https://developers.openai.com/api/docs/guides/reasoning)).
+- **Reasoning effort is a request parameter.** On the Anthropic API, `output_config.effort` takes `low`, `medium`, `high`, `xhigh` or `max`; the default and supported values depend on the model (see [Effort](https://platform.claude.com/docs/en/build-with-claude/effort)). On models with adaptive thinking, effort is the main control for how often and how deeply the model thinks; older extended-thinking models use a `budget_tokens` cap instead. On the OpenAI API, `reasoning.effort` ranges from `none` to `max` (model-dependent, default `medium`), and reasoning tokens are billed as output and reported in `output_tokens_details.reasoning_tokens` (see the [reasoning guide](https://developers.openai.com/api/docs/guides/reasoning)). Those are the Responses API's names; Chat Completions, which rig's `openai_chat.py` and OpenRouter use, spells them `reasoning_effort` and `completion_tokens_details.reasoning_tokens`.
 - **Effort changes more than thinking.** It affects every output token: explanations, tool-call arguments and how many tool calls the model makes. Lower effort usually means fewer, terser tool calls, which can help a well-scoped step and hurt an exploratory one.
 - **Routing strategies, cheapest first.** Static rules per call site (compaction and file summaries go to the small model). A heuristic scorer over request features (length, code, reasoning markers), which is LiteLLM's complexity router. A learned router that predicts whether the strong model is needed and applies a calibrated threshold, which is RouteLLM. A cascade that tries the cheap option, checks the result, and escalates. A bandit that learns online from outcomes, which is LiteLLM's adaptive router.
 - **Agents route per step.** Planning, a hard debugging step or a final synthesis needs strength; reading, searching, summarizing and classifying usually don't. Escalation signals come from the trajectory: the same tool call failing repeatedly, tests still failing after an edit, a verifier rejecting an answer.
@@ -2502,7 +2941,7 @@ Reference code on this page is pinned so line numbers never drift: [pi](https://
 ## This week's objective and target layout
 **Objective.** By Sunday, every model call rig makes goes through one gateway that picks model and effort by role, logs why, keeps that choice stable enough to protect the prompt cache, escalates on stalls with a cap, and backs off when the budget runs low — and the weekly report shows, on your Week 5 evals, one routed configuration within the noise of "always the big model" at a clearly lower cost per success, or says honestly that none was.
 
-**What changes.** The gateway *is* a `Provider` (Week 2): it implements `stream(request)` and dispatches to the real providers underneath, so `runtime.py` doesn't change at all. What does change is that every call site now says which role it's playing:
+**What changes.** The gateway *is* a `Provider` (Week 2): it implements `stream(context)` and dispatches to the real providers underneath, so `runtime.py` doesn't change at all. What does change is that every call site now says which role it's playing:
 
 | File | Its one job | Reference counterpart | Day |
 |---|---|---|---|
@@ -2523,24 +2962,25 @@ notes/week8-experiments.md   # + the cost-vs-quality scatter
 tests/test_effort.py, test_routers.py, test_session_pin.py, test_budget_guard.py
 ```
 
-**How it fits together.** Every model call already flows through `provider.stream(request)`; now the provider is the gateway:
+**How it fits together.** Every model call already flows through `provider.stream(context)`; now the provider is the gateway. `Context` gains three fields this week, `role`, `session_id` and `effort` (a `ThinkingLevel`), and each adapter maps `effort` to its own API's parameter:
 
 ```python
 # gateway/__init__.py — a Provider (Week 2), so runtime.py is untouched
 class Gateway:
-    def stream(self, request):
-        role = request.pop("role")                                # declared by the call site
-        session = self.sessions.get(request["session_id"])
-        route = self.router.route(features(request, role, session), session)   # Wed
+    def stream(self, context):
+        role = context.role                                       # declared by the call site
+        session = self.sessions.get(context.session_id)
+        route = self.router.route(features(context, role, session), session)   # Wed
         route = self.budget_guard.adjust(route, session)          # Thu: effort down before model down
-        params = effort.apply(self.models[route.model], route.effort, request)  # Tue: clamped, mapped
+        level = effort.clamp(self.models[route.model], route.effort)            # Tue: clamped per model
+        provider = get_provider(route.provider, route.model)      # Week 2's factory: Anthropic, OpenAI, OpenRouter
         span.set_attributes(role=role, model=route.model, effort=route.effort,
                             router=self.router.name, score=route.score, reason=route.reason)
-        for event in self.providers[route.provider].stream(params):
+        for event in provider.stream(context.model_copy(update={"effort": level})):
             yield event
             if isinstance(event, TurnEnd):
-                ledger.record(request, event.usage, route)        # reasoning tokens as their own line
-        session.observe_turn(request, event)                      # stall signals for the next route
+                ledger.record(context, event.usage, route)        # reasoning tokens as their own line
+        session.observe_turn(context, event)                      # stall signals for the next route
 
 # call sites declare their role
 #   agent turns        -> "plan" (first turn), "explore" (previous batch was all read-only), else "act"
@@ -2578,8 +3018,8 @@ class Gateway:
 
 1. **`rig/gateway/policy.yaml`** — `version`, the role list (`plan`, `act`, `explore`, `summarize`, `judge`, `classify`), each role's default `{model, effort}`, the cascade `ladder`, `max_escalations`, `low_budget_usd`, and an approved-fallbacks list per role. The policy file's hash goes on every span (Week 5's `prompts.py` can load it).
 2. **`rig/gateway/__init__.py`** — `Gateway` as in **How it fits together**, with a static router to start (role → policy default). Change every call site to pass `role`: the agent's turns, Week 3's compaction, Week 4's rerank and rewrite, Week 5's judge. Swap the provider rig constructs for a `Gateway` wrapping it.
-3. **`rig/gateway/effort.py`** — `class ThinkingLevel(Enum): OFF, LOW, MEDIUM, HIGH, MAX`; per-model capability data (supported levels, whether it takes `effort` or only `budget_tokens`); `clamp(model, level)` returning the nearest supported level at or below the request; `apply(model, level, request)` writing Anthropic's `output_config.effort` (plus thinking settings) or OpenAI's `reasoning.effort`. For `budget_tokens`-only models, leave room for the answer: `budget = min(level_budget, max_tokens - answer_room)`. pi's versions: [`getSupportedThinkingLevels`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/models.ts#L1261), [`clampThinkingLevel`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/models.ts#L1272), [`thinkingBudgetForLevel`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/simple-options.ts#L82), [`clampThinkingBudgetToAnswerRoom`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/simple-options.ts#L89), and the Anthropic mapping in [`mapThinkingLevelToEffort`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/anthropic-messages.ts#L954).
-4. **Reasoning tokens** — read them from the response (`output_tokens_details.reasoning_tokens` on OpenAI; thinking blocks on Anthropic) and record them as their own field in the trace and in Week 3's ledger, priced as output.
+3. **`rig/gateway/effort.py`** — `class ThinkingLevel(Enum): OFF, LOW, MEDIUM, HIGH, MAX`; per-model capability data (supported levels, whether it takes `effort` or only `budget_tokens`); `clamp(model, level)` returning the nearest supported level at or below the request; the clamped level goes on `Context.effort`, and each Week 2 adapter maps it to its own parameter: `anthropic.py` to `output_config.effort` (plus thinking settings), `openai_chat.py` to `reasoning_effort`. For `budget_tokens`-only models, leave room for the answer: `budget = min(level_budget, max_tokens - answer_room)`. pi's versions: [`getSupportedThinkingLevels`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/models.ts#L1261), [`clampThinkingLevel`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/models.ts#L1272), [`thinkingBudgetForLevel`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/simple-options.ts#L82), [`clampThinkingBudgetToAnswerRoom`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/simple-options.ts#L89), and the Anthropic mapping in [`mapThinkingLevelToEffort`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/ai/src/api/anthropic-messages.ts#L954).
+4. **Reasoning tokens** — read them from the response (`completion_tokens_details.reasoning_tokens` on Chat Completions, `output_tokens_details.reasoning_tokens` on OpenAI's Responses API; thinking blocks on Anthropic), in each adapter, as a `reasoning_tokens` field on `Usage`, and record them as their own field in the trace and in Week 3's ledger, priced as output.
 
 Tests: `test_effort.py` — `clamp` never returns a level a model doesn't list; a `budget_tokens` model's budget always leaves at least `answer_room` under `max_tokens`; `apply` produces exactly the parameter names each provider documents.
 
@@ -3321,11 +3761,11 @@ def run_subagent(parent, task, tool_names, max_usd, max_steps=15, report_words=4
     reserve = parent.budget.reserve(usd=min(max_usd, 0.5 * parent.budget.remaining_usd()),
                                     steps=max_steps)                      # Wed: carved out of the parent
     try:
-        child = Agent(parent.ws, task + report_instructions(report_words),
+        child = Agent(parent.ws,                                          # no messages: a fresh transcript
                       tools=parent.tools.subset(tool_names),              # narrower tool set
                       budget=reserve, depth=parent.depth + 1,
                       trace=parent.trace.child(task))                      # Tue: same trace id
-        result = child.run()
+        result = child.run(task + report_instructions(report_words))
     finally:
         parent.budget.settle(reserve)                                      # unused reserve returns
     return result.final[:2000]                  # findings and evidence ids, never the child's transcript
@@ -3592,7 +4032,7 @@ The week's real test is a single planted question — why did revenue fall? — 
 | Wed | 2–4 h | Build steps 3-4: `artifacts/store.py`; the fixture folder and task | `sales.csv`, `marketing.csv`, `earnings.pdf` built with a planted cause; the task runs end to end once |
 | Thu | 2–2.5 h | Build step 5: eval assertions W01-W10; read and trace the OpenHands agent/workspace path | Computed values, sources, artifacts and the planted cause all check automatically |
 | Fri | 1.5–2 h | Run experiments 1-3 | Numbers on what the `python` tool and recomputation actually catch |
-| Sat | 3–4 h | Build steps 6-7: `rig audit`; `rig/ingest/` with Docling; read docling-core's chunkers | An artifact's lineage replays in a fresh workspace; uploaded PDFs are chunked and searchable |
+| Sat | 3–4 h | Build steps 6-7: `rig audit`; `rig/ingest/` with Docling; read docling-core's chunkers; optionally step 8, `rig shell` | An artifact's lineage replays in a fresh workspace; uploaded PDFs are chunked and searchable |
 | Sun | 2–3 h | Run remaining experiments; checkpoint | The revenue task solved with a traceable report; checkpoint passed or a redo list |
 
 ### Monday — the workspace boundary and lineage, before you build either.
@@ -3662,6 +4102,7 @@ Run Experiments 1–3 below. For Experiment 2, add a `--plant-error join|units|q
 1. **`rig/audit.py`** — `rig audit <artifact_id>`: load the artifact; walk its lineage backwards (inputs that are themselves artifacts get their own cells replayed first); create a fresh `LocalWorkspace` with only the original input files (verified by hash — refuse if any differ); rerun the cells in order; compare the new file's hash with the recorded one and, if different, show a diff (text) or both values (for CSV, a per-cell diff).
 2. **`rig/ingest/`** — `parse.py`: Docling's converter (see its [docs](https://docling-project.github.io/docling/)) turns PDF and DOCX into a `DoclingDocument`. `chunk.py`: docling-core's [`HybridChunker`](https://github.com/docling-project/docling-core/blob/v2.101.1/docling_core/transforms/chunker/hybrid_chunker.py#L55) with a token limit matched to your Week 4 embedding model, tables kept whole and serialized as triplets ([`TripletTableSerializer`](https://github.com/docling-project/docling-core/blob/v2.101.1/docling_core/transforms/chunker/hierarchical_chunker.py#L46)). `contextualize.py`: first the heading path ([`contextualize`](https://github.com/docling-project/docling-core/blob/v2.101.1/docling_core/transforms/chunker/base.py#L82)), then optionally a 50–100-token model note per chunk, with the whole document as a cached prefix (Week 3's `cache_policy.py`) so each note costs only the chunk's tokens. `index.py`: insert into Week 4's `chunks` table with `content_hash`, `parser_version` and `chunker_version`; skip a file whose three hashes are unchanged.
 3. Read docling-core per **Read** below: [`_split_by_doc_items`](https://github.com/docling-project/docling-core/blob/v2.101.1/docling_core/transforms/chunker/hybrid_chunker.py#L161), [`_merge_chunks_with_matching_metadata`](https://github.com/docling-project/docling-core/blob/v2.101.1/docling_core/transforms/chunker/hybrid_chunker.py#L344), [`chunk`](https://github.com/docling-project/docling-core/blob/v2.101.1/docling_core/transforms/chunker/hybrid_chunker.py#L390).
+4. **Optional: `rig/shell.py`, an interactive shell (about 1.5 h more).** `rig shell` opens a prompt loop like Claude Code's [interactive mode](https://code.claude.com/docs/en/interactive-mode): a line that starts with `/` goes to the shell's own table of slash commands (`/config set model ...`, `/resume`, `/fork`), whose handlers call the same core functions as Week 2's `rig` subcommands, and catch their errors so a typo never ends the session; anything else is a user turn sent through `Agent.run()` and rendered as it streams, and Ctrl-C aborts that turn, not the shell. Run the agent on the main thread, which is the only one allowed to handle signals, and read input on another; while a run is going, plain lines become follow-ups and `/resume` or `/fork` are refused until it ends, and a `/config` change applies from the next turn. By now each command is a few lines over code you already have: `/model` and `/effort` (Week 8's gateway), `/compact` (Week 3's `Compaction`), `/usage` (this session's tokens and dollars from Week 3's ledger), `/mcp` (Week 9's client: servers and their tools), `/audit` (step 1). Use [`prompt_toolkit`](https://python-prompt-toolkit.readthedocs.io/en/stable/) for history, multi-line input (Enter sends, Option+Enter adds a line; pasted text arrives as one message) and tab-completing command names and session ids; the same completion logic, exposed as a hidden `rig __complete` command, gives the plain `rig` command shell completion too, and load user-defined commands from `.rig/commands/*.md`, where each Markdown file is a prompt template that becomes `/name`, the way Claude Code loads `.claude/commands/` ([commands](https://code.claude.com/docs/en/slash-commands)). pi's built-in list, [`BUILTIN_SLASH_COMMANDS`](https://github.com/earendil-works/pi/blob/136b87e8a7f5a3e5186de0289523ba327dc592fc/packages/coding-agent/src/core/slash-commands.ts#L19-L43), is a good menu to choose from.
 
 Tests: `test_audit.py` — auditing an untouched artifact reports a hash match; editing an input file makes the audit refuse. `test_ingest.py` — `earnings.pdf`'s table comes out as one chunk; re-ingesting an unchanged file inserts nothing.
 
@@ -3684,6 +4125,7 @@ Tests: `test_audit.py` — auditing an untouched artifact reports a hash match; 
 5. [ ] Eval assertions W01–W10: computed values within tolerance, the expected columns and sources used, artifacts exist and open, a chart was produced, the report names the planted cause, and the generated code re-executes to the same numbers.
 6. [ ] `rig audit <artifact>`: re-runs an artifact's lineage in a fresh workspace and diffs the result.
 7. [ ] `rig/ingest/`: parse uploaded PDF and DOCX files with Docling into a structured document, chunk them with its hybrid chunker (tables whole), add context (the heading path, then a model-written note with the whole document as a cached prefix), and index the chunks into Week 4's Postgres tables. Re-ingest a file only when its hash, the parser version or the chunker version changes.
+8. [ ] Optional: `rig shell`, an interactive prompt where `/` lines go to its own slash commands over Week 2's core functions (`/config`, `/model`, `/compact`, `/usage`, `/mcp`, `/audit`, plus user commands from `.rig/commands/`) and everything else is a turn for the agent.
 
 ```python
 @dataclass(frozen=True)
@@ -4335,7 +4777,7 @@ tests/test_ledger.py, test_resume.py, test_edit_file_v3.py, test_approvals.py, t
 for seq in count():
     end = ledger.get_step(run_id, seq, "model")                 # replay: a recorded response
     if end is None:
-        for event in provider.stream(request):
+        for event in provider.stream(context):
             yield event
             if isinstance(event, TurnEnd): end = event
         end = ledger.put_step(run_id, seq, "model", end)        # durable BEFORE any tool runs

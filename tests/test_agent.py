@@ -1,4 +1,4 @@
-"""The Week 1 loop with the model replaced by scripted responses: no network, no cost."""
+"""The agent loop with the model replaced by scripted responses: no network, no cost."""
 
 import json
 from collections.abc import Iterator

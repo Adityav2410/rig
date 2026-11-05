@@ -1,4 +1,4 @@
-"""Prices come from claude.json: every model in it, cache tokens included, tiers by prompt size."""
+"""Prices come from pricing/*.json: every model, cache tokens included, tiers by prompt size."""
 
 import pytest
 

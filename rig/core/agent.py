@@ -1,8 +1,8 @@
-"""The single-agent loop (Week 1): call the model, run the tools it asks for, repeat.
+"""The single-agent loop: call the model, run the tools it asks for, repeat.
 
-Messages are the Anthropic Messages API's own dicts, sent with the raw client in llm.py. Week 2
-replaces both (rig's own message types, a provider layer, an event runtime) and keeps this
-file's interface: `Agent(ws, model=..., budget=...).run(task)`, its statuses and trace events.
+Messages are the Anthropic Messages API's own dicts, sent with the raw client in llm.py. The
+interface is meant to outlast that: `Agent(ws, model=..., budget=...).run(task)`, its statuses
+and its trace events stay the same when the messages and the client change.
 """
 
 import time
@@ -126,8 +126,8 @@ class Agent:
         """One model call per turn until a turn asks for no tools; returns that turn's stop reason.
 
         Every tool_use must get a tool_result in the next request, or the API rejects it, so a
-        turn's calls are all answered: run one at a time in order (Week 2 runs read-only ones in
-        parallel), or, if the turn hit max_tokens and the arguments may be cut off, not run at all.
+        turn's calls are all answered: run one at a time in order, or, if the turn hit
+        max_tokens and the arguments may be cut off, not run at all.
         """
         while True:
             self._budget.check()
@@ -205,7 +205,7 @@ class Agent:
 
 
 def _usage(raw: dict[str, Any]) -> dict[str, int]:
-    """Anthropic's usage, under the names budget and pricing read (Week 2's `Usage` model)."""
+    """Anthropic's usage, under the names budget and pricing read."""
     return {
         "input_tokens": raw.get("input_tokens", 0),
         "output_tokens": raw.get("output_tokens", 0),
