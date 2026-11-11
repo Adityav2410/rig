@@ -11,6 +11,7 @@ from rig.cli.sessions import settings
 from rig.core.config import Config
 from rig.core.session import SessionLog
 from rig.providers.fake import FakeProvider, text_turn
+from rig.providers.types import AssistantMessage, ToolCall
 
 runner = CliRunner()
 
@@ -115,3 +116,17 @@ def test_a_relative_repo_is_resolved_against_the_cwd(tmp_path: Path) -> None:
     c = Ctx(cwd=tmp_path)
     s = settings(c, Path("proj"), use_sandbox=None, provider=None, model=None, max_tokens=None)
     assert s.repo == tmp_path / "proj"
+
+
+def test_resume_without_a_task_finishes_a_session_killed_mid_tool(tmp_path: Path) -> None:
+    _rig(tmp_path, "run", "--task", "go", provider=FakeProvider([text_turn("a")]))
+    session = _only_session(tmp_path)
+    call = ToolCall(id="toolu_1", name="read_file", arguments={"path": "x"})
+    # The process died after the call was logged and before its result was.
+    session.append_message(AssistantMessage(content=[call], provider="fake", model="fake"))
+
+    provider = FakeProvider([text_turn("carried on")])
+    result = _rig(tmp_path, "resume", session.path.stem, provider=provider)
+
+    assert result.exit_code == 0, result.output
+    assert provider.contexts[0].messages[-1].role == "tool_result"  # the synthetic result

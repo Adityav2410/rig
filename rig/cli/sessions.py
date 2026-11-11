@@ -13,7 +13,15 @@ from ..core.config import Config
 from ..core.session import SessionLog
 from ..core.trace import Trace
 from ..providers import get_provider
-from ..providers.types import AssistantMessage, Event, MessageDelta, Provider, ToolStart, TurnEnd
+from ..providers.types import (
+    AssistantMessage,
+    Event,
+    MessageDelta,
+    Provider,
+    ToolCall,
+    ToolStart,
+    TurnEnd,
+)
 from ..sandbox.workspace import Workspace
 from .common import Ctx, fail, get_ctx, load_config
 
@@ -98,8 +106,13 @@ def _run(c: Ctx, o: _Settings, session: SessionLog, task: str | None) -> None:
     """Run the agent on `session`, streaming its output; exit 0 only when it ends in an answer."""
     if task is None:
         last = session.branch()[-1:]
-        if not last or isinstance(last[0], AssistantMessage):
-            # Sending a transcript that ends in an answer would ask the model to extend it.
+        # Sending a transcript that ends in an answer would ask the model to extend it. One
+        # that ends in tool calls was killed mid-tool; the runtime gives those calls synthetic
+        # results, so it can continue.
+        if not last or (
+            isinstance(last[0], AssistantMessage)
+            and not any(isinstance(part, ToolCall) for part in last[0].content)
+        ):
             raise fail("this session ended with an answer; pass --task to continue it")
     cfg = o.config
     provider = c.provider or _provider(cfg)  # first: a bad name or a missing key starts nothing
