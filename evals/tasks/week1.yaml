@@ -195,3 +195,51 @@
       - test_hidden_port.py
     selectors:
       - /tmp/hidden/test_hidden_port.py
+
+- id: T14
+  rung: feature-reuse-pattern
+  prompt: >
+    When a click.Choice value is mistyped (for example --color gren with choices red, green
+    and blue), the error lists the choices but doesn't suggest the one the user probably
+    meant, the way click already does for mistyped option and command names. Keep the
+    current message and add the same kind of "Did you mean ...?" suggestion for options and
+    arguments, with no suggestion when nothing is close.
+  seed: null
+  grader:
+    kind: pytest
+    hidden_tests:
+      - test_hidden_choice_suggest.py
+    selectors:
+      - /tmp/hidden/test_hidden_choice_suggest.py
+
+- id: T15
+  rung: feature-cross-module
+  prompt: >
+    Add command aliases: `@group.command(aliases=["rm", "del"])` should make `rm` and `del`
+    run the same command as its real name. In the group's --help the command is listed once,
+    as `remove (rm, del)`, never as separate rows. Unknown names stay "No such command"
+    errors, and commands without aliases behave as before.
+  seed: null
+  grader:
+    kind: pytest
+    hidden_tests:
+      - test_hidden_aliases.py
+    selectors:
+      - /tmp/hidden/test_hidden_aliases.py
+
+- id: T16
+  rung: feature-cross-module
+  prompt: >
+    Add a click.Duration parameter type, used as `type=click.Duration()`, that turns values
+    like 90s, 5m, 2h, 1d and 1h30m into a datetime.timedelta. Units are d, h, m and s,
+    written largest first, each a whole non-negative number; a bare number means seconds.
+    Anything else (an empty value, an unknown unit, units out of order, a fraction) is a
+    normal usage error. A timedelta given as the option's default must work, and --help
+    shows the value as DURATION.
+  seed: null
+  grader:
+    kind: pytest
+    hidden_tests:
+      - test_hidden_duration.py
+    selectors:
+      - /tmp/hidden/test_hidden_duration.py
