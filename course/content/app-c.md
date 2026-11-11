@@ -6,7 +6,7 @@ Answer each aloud, with numbers from your own rig runs where they apply. If an a
 4. Why does a timestamp at the top of a system prompt cost money? Start from per-layer key and value tensors and end at a serving engine's block table.
 5. A serving engine is at 40% of its target throughput. What do you measure first, and what are the likely causes?
 6. When should retrieval be a tool rather than automatic context, and how would you prove the choice for a specific codebase?
-7. Design the edit tool for a coding agent. Defend exact versus fuzzy matching with failure modes you have measured.
+7. Design the edit tool for a coding agent. Say how it matches, what it does when the match is missing or not unique, and why its arguments are flat.
 8. How does your research mode make every claim traceable, and how do you measure that the citations actually support the claims?
 9. Your bill doubled and quality held. Walk through how you would find out whether routing, effort, cache misses or traffic caused it, using only your traces.
 10. A tool call timed out. Did it run? Explain how you design the system so the answer does not matter, and why the model's tool-call id can't be the key.
