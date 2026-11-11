@@ -36,6 +36,7 @@ from ..providers.types import (
 )
 from ..sandbox.workspace import Workspace
 from ..tools import get_tools, run_tool
+from ..util.locked_dict import LockedDict
 from ..util.logging import get_logger
 from . import runtime
 from .budget import Budget
@@ -146,9 +147,8 @@ class Agent:
         self._session = session
         self._logged = len(self.messages)  # how many of self.messages the session already holds
         # call id -> start time / measured duration, written by the tool hooks for the trace
-        self._tool_started: dict[str, float] = {}
-        self._tool_duration: dict[str, float] = {}
-        self._timer_lock = threading.Lock()
+        self._tool_started: LockedDict[str, float] = LockedDict()
+        self._tool_duration: LockedDict[str, float] = LockedDict()
         # Set from another thread (the CLI's Ctrl-C handler); the runtime checks it at safe points.
         self._abort = threading.Event()
         # Typed while a run streams (the CLI's stdin thread); the runtime drains them between turns.
@@ -278,6 +278,7 @@ class Agent:
         return result
 
     def _persist(self) -> None:
+        """Persist messages to session logs."""
         if self._session is None:
             return
         for m in self.messages[self._logged :]:
@@ -330,7 +331,7 @@ class Agent:
                     "tool.start", step=self._step, call_id=event.call.id, tool=event.call.name
                 )
             case ToolEnd():
-                duration = self._tool_duration.pop(event.call.id, None)
+                duration = self._tool_duration.pop(event.call.id)
                 self._trace.log_event(
                     "tool.result",
                     step=self._step,
@@ -345,15 +346,14 @@ class Agent:
     # Tool timing rides on the hooks because they run on the tool's own thread, immediately
     # before and after the call. Timing at ToolEnd instead would be wrong for a parallel batch:
     # its ToolEnds are only yielded once every call has finished, so each would get the
-    # batch's time. The lock guards the dicts, since parallel calls write them concurrently.
+    # batch's time. Parallel calls write these dicts at once, so they are LockedDicts.
 
     def _start_timer(self, call: ToolCall) -> None:  # returning None means "allow"
-        with self._timer_lock:
-            self._tool_started[call.id] = time.monotonic()
+        self._tool_started[call.id] = time.monotonic()
 
     def _stop_timer(self, call: ToolCall, result: ToolOutput) -> ToolOutput:
-        with self._timer_lock:
-            started = self._tool_started.pop(call.id)
+        started = self._tool_started.pop(call.id)
+        if started is not None:  # always set: before_tool runs first on the same thread
             self._tool_duration[call.id] = round(time.monotonic() - started, 4)
         return result  # unchanged: this hook only observes
 

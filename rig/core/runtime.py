@@ -10,7 +10,7 @@ import threading
 from collections.abc import Callable, Generator, Hashable
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import closing, nullcontext
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 from ..providers.types import (
@@ -31,6 +31,7 @@ from ..providers.types import (
     Usage,
     UserMessage,
 )
+from ..util.locked_dict import LockedDict
 from .budget import Budget
 from .exceptions import LLMError
 
@@ -89,23 +90,9 @@ def _no_messages() -> list[UserMessage]:
     return []
 
 
-@dataclass
-class _PathLocks:
-    """One lock per file, created on first use, so edits to the same file never overlap.
-
-    `_guard` makes lookup-or-create atomic; without it two threads could both miss and each
-    store a different lock for the same file.
-    """
-
-    _locks: dict[Hashable, threading.Lock] = field(default_factory=dict)
-    _guard: threading.Lock = field(default_factory=threading.Lock)
-
-    def get(self, key: Hashable) -> threading.Lock:
-        with self._guard:
-            return self._locks.setdefault(key, threading.Lock())
-
-
-_PATH_LOCKS = _PathLocks()  # process-wide: two runs editing one file still take turns
+# One lock per file, created on first use, so edits to the same file never overlap.
+# Process-wide: two runs editing one file still take turns.
+_PATH_LOCKS: LockedDict[Hashable, threading.Lock] = LockedDict()
 
 
 def run(
@@ -256,7 +243,11 @@ def run_tools(
         verdict = hooks.before_tool(c)
         if verdict is not None:
             return c, f"Blocked: {verdict.reason}", True
-        lock = _PATH_LOCKS.get(tool.lock_key(c.arguments)) if tool.lock_key else nullcontext()
+        lock = (
+            _PATH_LOCKS.get_or_create(tool.lock_key(c.arguments), threading.Lock)
+            if tool.lock_key
+            else nullcontext()
+        )
         with lock:  # a no-op unless the tool writes a file
             out, is_error = tool.run(c.arguments)
         out, is_error = hooks.after_tool(c, (out, is_error))  # e.g. redact or trim output

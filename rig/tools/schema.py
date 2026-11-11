@@ -17,10 +17,6 @@ class ToolPropertyType(enum.StrEnum):
 class ToolPropertySchema(BaseModel):
     type: ToolPropertyType
     description: str = ""
-    # JSON Schema for nested shapes: `items` for an array, `properties`/`required` for an object.
-    items: ToolPropertySchema | None = None
-    properties: dict[str, ToolPropertySchema] | None = None
-    required: list[str] | None = None
 
 
 class ToolInputSchema(BaseModel):

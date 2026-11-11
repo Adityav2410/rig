@@ -1,7 +1,6 @@
 import difflib
 import subprocess
 from pathlib import Path
-from typing import Any
 
 from ..core.exceptions import PathEscapesWorkspace, ToolError
 from ..sandbox.workspace import Workspace
@@ -22,142 +21,95 @@ def resolve(ws: Workspace, rel: str) -> Path:
     return p
 
 
-_EDIT = ToolPropertySchema(
-    type=ToolPropertyType.OBJECT,
-    properties={
-        "old_text": ToolPropertySchema(
-            type=ToolPropertyType.STRING,
-            description="Text to replace. Must appear exactly once in the file. "
-            "Leave empty to create a new file.",
-        ),
-        "new_text": ToolPropertySchema(
-            type=ToolPropertyType.STRING, description="Replacement text."
-        ),
-        "replace_all": ToolPropertySchema(
-            type=ToolPropertyType.BOOLEAN,
-            description="Replace every occurrence of old_text instead of requiring exactly one, "
-            "e.g. to rename a variable. Defaults to false.",
-        ),
-    },
-    required=["old_text", "new_text"],
-)
-
-
 @tool(
     name="edit_file",
-    description="Replace text in a file. Use this, not `bash`, to change source code. Each "
-    "edit's `old_text` must appear exactly once in the file, indentation included: read the "
-    "file first and include enough lines to make it unique, or set `replace_all` on that edit "
-    "to change every occurrence. There is no fuzzy matching. All edits are checked against the "
-    "file before anything changes; if one fails, nothing is written and the error shows the "
-    "closest lines. Use plain newlines; the file keeps its own line endings. To create a file, "
-    "pass one edit with an empty `old_text`.",
+    description="Replace text in a file. Use this, not `bash`, to change source code. "
+    "`old_text` must appear exactly once in the file, indentation included: read the file "
+    "first and include enough lines to make it unique, or set `replace_all` to change every "
+    "occurrence. There is no fuzzy matching; a miss shows the closest lines. Make one edit "
+    "per call. Use plain newlines; the file keeps its own line endings. To create a file, "
+    "pass an empty `old_text`.",
     input_schema=ToolInputSchema(
         properties={
             "path": ToolPropertySchema(
                 type=ToolPropertyType.STRING, description="Path of file relative to workspace."
             ),
-            "edits": ToolPropertySchema(
-                type=ToolPropertyType.ARRAY,
-                description="Replacements, applied together or not at all.",
-                items=_EDIT,
+            "old_text": ToolPropertySchema(
+                type=ToolPropertyType.STRING,
+                description="Text to replace. Must appear exactly once in the file unless "
+                "replace_all is set. Leave empty to create a new file.",
+            ),
+            "new_text": ToolPropertySchema(
+                type=ToolPropertyType.STRING, description="Replacement text."
+            ),
+            "replace_all": ToolPropertySchema(
+                type=ToolPropertyType.BOOLEAN,
+                description="Replace every occurrence of old_text, e.g. to rename a variable. "
+                "Defaults to false.",
             ),
         },
-        required=["path", "edits"],
+        required=["path", "old_text", "new_text"],
     ),
     input_examples=[
-        {"path": "notes/todo.md", "edits": [{"old_text": "", "new_text": "Creating new file\n"}]},
+        {"path": "notes/todo.md", "old_text": "", "new_text": "Creating new file\n"},
         {
             "path": "src/app.py",
-            "edits": [
-                {"old_text": "DEBUG = True", "new_text": "DEBUG = False"},
-                {"old_text": "def run():\n    pass", "new_text": "def run():\n    serve()"},
-            ],
+            "old_text": "def run():\n    pass",
+            "new_text": "def run():\n    serve()",
         },
-        {
-            "path": "src/app.py",
-            "edits": [{"old_text": "old_name", "new_text": "new_name", "replace_all": True}],
-        },
+        {"path": "src/app.py", "old_text": "old_name", "new_text": "new_name", "replace_all": True},
     ],
 )
-def edit_file(ws: Workspace, path: str, edits: list[dict[str, Any]]) -> str:
-    """Apply all `edits` to one file, or none of them.
+def edit_file(
+    ws: Workspace, path: str, old_text: str, new_text: str, replace_all: bool = False
+) -> str:
+    """Replace `old_text` with `new_text` in one file: its one occurrence, or every one.
 
     How:
       1. Read bytes, so Windows (CRLF) line endings survive; text mode would turn them into LF.
          Match on an LF copy, since the model writes `old_text` with plain newlines.
-      2. Check every edit before changing anything: each must match exactly once (or, with
-         `replace_all`, at least once) and not overlap another. A miss never guesses: it names
-         the edit and the closest lines, or says the edit looks already applied.
-      3. Apply from the end of the file backwards, so earlier positions stay valid, then put
-         the original line endings back and write.
+      2. `old_text` must occur exactly once, or at least once with `replace_all`. A miss never
+         guesses: it shows the closest lines, or says the edit looks already applied.
+      3. Replace, put the original line endings (and any BOM) back, and write.
     """
     p = resolve(ws, path)
-    if not edits or not all(
-        isinstance(e, dict) and {"old_text", "new_text"} <= e.keys() for e in edits
-    ):
-        raise ToolError(
-            "edit_file", "edits must be a non-empty list of {old_text, new_text} objects"
-        )
-    if any(e["old_text"] == "" for e in edits):
-        if len(edits) != 1:
-            raise ToolError(
-                "edit_file", "an empty old_text creates a file and must be the only edit"
-            )
+    if old_text == "":
         if p.exists():
             raise ToolError("edit_file", f"{path} already exists; give old_text to edit it")
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_bytes(edits[0]["new_text"].encode())
+        p.write_bytes(new_text.encode())
         return f"Created {path}"
     if not p.is_file():
-        raise ToolError(
-            "edit_file",
-            f"{path} does not exist; to create it, pass one edit with an empty old_text",
-        )
+        raise ToolError("edit_file", f"{path} does not exist; to create it, pass an empty old_text")
 
     raw = p.read_bytes().decode("utf-8")
     bom = "\ufeff" if raw.startswith("\ufeff") else ""  # a marker some editors add; keep it
     ending = _line_ending(raw)
     content = _to_lf(raw[len(bom) :])
+    old, new = _to_lf(old_text), _to_lf(new_text)
 
-    spans = []  # (start, end, new_text) of each replacement in the LF copy
-    for i, e in enumerate(edits, 1):
-        old, new = _to_lf(e["old_text"]), _to_lf(e["new_text"])
-        n = content.count(old)
-        which = f"edit {i} of {len(edits)}"
-        if n == 0:
-            # After a resume or a retry the model may re-send an edit that already landed.
-            applied = (
-                " Its new_text is already in the file, so this edit may already be applied."
-                if new.strip() and new in content
-                else ""
-            )
-            raise ToolError(
-                "edit_file",
-                f"{which}: old_text not found in {path}.{applied}{_closest(content, old)}",
-            )
-        if n > 1 and not e.get("replace_all"):
-            raise ToolError(
-                "edit_file",
-                f"{which}: old_text matches {n} times in {path}; add surrounding lines, "
-                "or set replace_all to change every one",
-            )
-        start = content.find(old)
-        while start != -1:  # once, unless replace_all
-            spans.append((start, start + len(old), new))
-            start = content.find(old, start + len(old))
-    spans.sort()
-    for (_, prev_end, _), (start, _, _) in zip(spans, spans[1:], strict=False):
-        if start < prev_end:
-            raise ToolError("edit_file", "two edits overlap; merge them into one")
-
-    result = content
-    for start, end, new in reversed(spans):
-        result = result[:start] + new + result[end:]
+    n = content.count(old)
+    if n == 0:
+        # After a resume or a retry the model may re-send an edit that already landed.
+        applied = (
+            " Its new_text is already in the file, so this edit may already be applied."
+            if new.strip() and new in content
+            else ""
+        )
+        raise ToolError(
+            "edit_file", f"old_text not found in {path}.{applied}{_closest(content, old)}"
+        )
+    if n > 1 and not replace_all:
+        raise ToolError(
+            "edit_file",
+            f"old_text matches {n} times in {path}; add surrounding lines, "
+            "or set replace_all to change every one",
+        )
+    result = content.replace(old, new) if replace_all else content.replace(old, new, 1)
     if result == content:
-        raise ToolError("edit_file", "the edits change nothing")
+        raise ToolError("edit_file", "the edit changes nothing")
     p.write_bytes((bom + result.replace("\n", ending)).encode("utf-8"))
-    return f"Edited {path} ({len(edits)} edit{'s' if len(edits) > 1 else ''})"
+    return f"Edited {path} ({n} replacement{'s' if n > 1 else ''})"
 
 
 def _line_ending(text: str) -> str:
