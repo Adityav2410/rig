@@ -58,6 +58,15 @@ def event_fields(rec: dict[str, Any]) -> tuple[str, dict[str, Any]]:
     return kind, {k: v for k, v in rec.items() if k not in _ENVELOPE_KEYS}
 
 
+def pretty_arguments(arguments: Any, max_chars: int) -> str:
+    """Tool-call arguments as indented JSON, one key per line; long strings are truncated."""
+    if isinstance(arguments, dict):
+        arguments = {
+            k: truncate(v, max_chars) if isinstance(v, str) else v for k, v in arguments.items()
+        }
+    return json.dumps(arguments, indent=2, ensure_ascii=False)
+
+
 def summarize_block(block: dict[str, Any], max_chars: int) -> str:
     btype = block.get("type")
     if btype == "text":
@@ -65,9 +74,12 @@ def summarize_block(block: dict[str, Any], max_chars: int) -> str:
     if btype == "thinking":
         thinking = block.get("thinking", "")
         return f"thinking: {truncate(thinking, max_chars)!r}" if thinking else "thinking: (empty)"
-    if btype == "tool_use":
-        name, input_ = block.get("name"), block.get("input", {})
-        return f"tool_use[{block.get('id')}]: {name}({as_json(input_, max_chars)})"
+    if btype == "tool_call":  # rig's own type
+        header = f"tool_call[{block.get('id')}]: {block.get('name')}"
+        return f"{header}\n{pretty_arguments(block.get('arguments', {}), max_chars)}"
+    if btype == "tool_use":  # Anthropic's, in older traces
+        header = f"tool_use[{block.get('id')}]: {block.get('name')}"
+        return f"{header}\n{pretty_arguments(block.get('input', {}), max_chars)}"
     if btype == "tool_result":
         return (
             f"tool_result[{block.get('tool_use_id')}]: {as_json(block.get('content'), max_chars)}"
@@ -95,16 +107,24 @@ def is_block_list(value: Any) -> bool:
     )
 
 
+def bullet(summary: str) -> list[str]:
+    """A list item; continuation lines of a multi-line summary line up under its text."""
+    first, *rest = summary.splitlines()
+    return [f"       - {first}", *(f"         {line}" for line in rest)]
+
+
 def format_field(key: str, value: Any, max_chars: int) -> list[str]:
     # Known "rich" shapes get pretty-printed; anything else is printed as-is rather
     # than skipped, so a field this script has never seen still shows up.
     if is_message(value):
         lines = [f"       {key}.role: {value.get('role')}"]
-        lines += [f"       - {s}" for s in summarize_content(value.get("content"), max_chars)]
+        lines += [
+            ln for s in summarize_content(value.get("content"), max_chars) for ln in bullet(s)
+        ]
         return lines
     if is_block_list(value):
         lines = [f"       {key}:"]
-        lines += [f"       - {s}" for s in summarize_content(value, max_chars)]
+        lines += [ln for s in summarize_content(value, max_chars) for ln in bullet(s)]
         return lines
     return [f"       {key}: {as_json(value, max_chars)}"]
 
