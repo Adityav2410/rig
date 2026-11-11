@@ -19,7 +19,7 @@
 #                                hardcoded number; needs bespoke logic in run_evals.py
 #   grader.selectors:           (kind: pytest) selectors run after the full suite, which
 #                                run_evals.py always runs as a blanket regression check
-#   grader.hidden_tests:        (kind: pytest, T10/T11 only) filenames under evals/hidden/
+#   grader.hidden_tests:        (kind: pytest) filenames under evals/hidden/
 #                                copied into /tmp/hidden inside the container before grading
 
 - id: T01
@@ -181,3 +181,17 @@
       - "already"
       - "premise is wrong"
       - "didn't change"
+
+- id: T13
+  rung: feature-cross-module
+  prompt: >
+    Add a click.Port parameter type for TCP/UDP port numbers, used as
+    `@click.option("--port", type=click.Port())`. It should accept integers from 1 to 65535,
+    reject anything else as a normal usage error, and show its allowed range in --help.
+  seed: null
+  grader:
+    kind: pytest
+    hidden_tests:
+      - test_hidden_port.py
+    selectors:
+      - /tmp/hidden/test_hidden_port.py
