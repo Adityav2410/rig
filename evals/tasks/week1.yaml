@@ -17,10 +17,11 @@
 #                                counts in the agent's answer against the grader's own
 #                                `python -m pytest -q` run in the same container, not a
 #                                hardcoded number; needs bespoke logic in run_evals.py
-#   grader.selectors:           (kind: pytest) selectors run after the full suite, which
-#                                run_evals.py always runs as a blanket regression check
-#   grader.hidden_tests:        (kind: pytest) filenames under evals/hidden/
-#                                copied into /tmp/hidden inside the container before grading
+#   grader.hidden_tests:        (kind: pytest) filenames under evals/hidden/, copied into
+#                                /tmp/hidden inside the container after the run and run
+#                                there. A pytest task passes when click's full suite and
+#                                every hidden test pass; a seeded task needs no hidden test,
+#                                since the seed breaks tests the full suite already runs
 
 - id: T01
   rung: locate
@@ -82,8 +83,7 @@
   seed: T04.patch
   grader:
     kind: pytest
-    selectors:
-      - tests/test_utils/test_make_default_short_help.py
+    # tests the seed breaks: tests/test_utils/test_make_default_short_help.py
 
 - id: T05
   rung: fix-local
@@ -93,8 +93,7 @@
   seed: T05.patch
   grader:
     kind: pytest
-    selectors:
-      - tests/test_types.py::test_range
+    # tests the seed breaks: tests/test_types.py::test_range
 
 - id: T06
   rung: fix-local
@@ -104,10 +103,7 @@
   seed: T06.patch
   grader:
     kind: pytest
-    selectors:
-      - tests/test_types.py
-      - tests/test_options.py::test_counting
-      - tests/test_commands.py
+    # tests the seed breaks: tests/test_types.py, tests/test_options.py::test_counting, tests/test_commands.py
 
 - id: T07
   rung: fix-cross-module
@@ -117,8 +113,7 @@
   seed: T07.patch
   grader:
     kind: pytest
-    selectors:
-      - tests/test_options.py::test_show_envvar_auto_prefix_dash_in_command
+    # tests the seed breaks: tests/test_options.py::test_show_envvar_auto_prefix_dash_in_command
 
 - id: T08
   rung: fix-subtle
@@ -128,8 +123,7 @@
   seed: T08.patch
   grader:
     kind: pytest
-    selectors:
-      - tests/test_termui.py::test_flag_value_prompt
+    # tests the seed breaks: tests/test_termui.py::test_flag_value_prompt
 
 - id: T09
   rung: fix-broad-symptom
@@ -139,8 +133,7 @@
   seed: T09.patch
   grader:
     kind: pytest
-    selectors:
-      - tests/
+    # tests the seed breaks: 53 across tests/ (every long option)
 
 - id: T10
   rung: fix-no-failing-test
@@ -152,8 +145,6 @@
     kind: pytest
     hidden_tests:
       - test_hidden_ansi.py
-    selectors:
-      - /tmp/hidden/test_hidden_ansi.py
 
 - id: T11
   rung: behaviour-change-no-failing-test
@@ -165,8 +156,6 @@
     kind: pytest
     hidden_tests:
       - test_hidden_nan.py
-    selectors:
-      - /tmp/hidden/test_hidden_nan.py
 
 - id: T12
   rung: false-premise
@@ -193,8 +182,6 @@
     kind: pytest
     hidden_tests:
       - test_hidden_port.py
-    selectors:
-      - /tmp/hidden/test_hidden_port.py
 
 - id: T14
   rung: feature-reuse-pattern
@@ -209,8 +196,6 @@
     kind: pytest
     hidden_tests:
       - test_hidden_choice_suggest.py
-    selectors:
-      - /tmp/hidden/test_hidden_choice_suggest.py
 
 - id: T15
   rung: feature-cross-module
@@ -224,8 +209,6 @@
     kind: pytest
     hidden_tests:
       - test_hidden_aliases.py
-    selectors:
-      - /tmp/hidden/test_hidden_aliases.py
 
 - id: T16
   rung: feature-cross-module
@@ -241,5 +224,3 @@
     kind: pytest
     hidden_tests:
       - test_hidden_duration.py
-    selectors:
-      - /tmp/hidden/test_hidden_duration.py
