@@ -28,9 +28,9 @@ def load_tasks(path: Path) -> list[dict[str, Any]]:
     return tasks
 
 
-def run_pytest(ws: Workspace, selectors: list[str]) -> tuple[bool, str]:
+def run_pytest(ws: Workspace, paths: list[str]) -> tuple[bool, str]:
     result = subprocess.run(
-        [*ws.exec_prefix, "python", "-m", "pytest", "-q", *selectors],
+        [*ws.exec_prefix, "python", "-m", "pytest", "-q", *paths],
         capture_output=True,
         text=True,
     )
@@ -95,14 +95,17 @@ def grade_pytest(task: dict[str, Any], snap_dir: Path, ws: Workspace) -> dict[st
     if not full_ok:
         return {"passed": False, "reason": f"full suite failed:\n{full_out[-2000:]}"}
 
+    hidden = []
     for hidden_name in task["grader"].get("hidden_tests", []):
         ws.copy_into(HIDDEN_DIR / hidden_name, f"/tmp/hidden/{hidden_name}")
+        hidden.append(f"/tmp/hidden/{hidden_name}")
+    if not hidden:  # a seeded task: the tests its seed breaks are in the full suite
+        return {"passed": True, "reason": None}
 
-    selectors = task["grader"]["selectors"]
-    selector_ok, selector_out = run_pytest(ws, selectors)
+    hidden_ok, hidden_out = run_pytest(ws, hidden)
     return {
-        "passed": selector_ok,
-        "reason": None if selector_ok else f"selectors failed:\n{selector_out[-2000:]}",
+        "passed": hidden_ok,
+        "reason": None if hidden_ok else f"hidden tests failed:\n{hidden_out[-2000:]}",
     }
 
 
